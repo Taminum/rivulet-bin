@@ -1,7 +1,6 @@
 services:
   app:
-    build:
-      context: .
+    image: ghcr.io/taminum/rivulet-bin:latest
     container_name: rivulet-app
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/rivulet
