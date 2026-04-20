@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-titlebar">
+    <div>
+        <p class="eyebrow">Compare revision {{ revision.revision_number }}</p>
+        <h1>{{ paste.title or paste.slug }}</h1>
+        <p class="meta-line">
+            <span>Current vs v{{ revision.revision_number }}</span>
+            <span>{{ revision_event_label }}</span>
+            <span>{{ revision_editor_label }}</span>
+            <span>{{ revision.created_at.strftime('%Y-%m-%d %H:%M') if revision.created_at else 'just now' }}</span>
+        </p>
+    </div>
+    <div class="view-actions">
+        <a class="button secondary" href="{{ revisions_url }}">All changes</a>
+        <a class="button secondary" href="{{ snapshot_url }}">Open snapshot</a>
+        <a class="button secondary" href="{{ current_view_url }}">Current</a>
+        <a class="button secondary" href="{{ current_edit_url }}">Edit current</a>
+    </div>
+</section>
+
+<section class="compare-shell">
+    <article class="surface compare-panel">
+        <header class="compare-panel-header">
+            <p class="eyebrow">Current</p>
+            <div class="compare-panel-title">
+                <strong>{{ paste.title or paste.slug }}</strong>
+                <span>{{ current_panel.display_syntax }}</span>
+            </div>
+            <p class="compare-panel-meta">
+                <span>{{ current_panel.view_mode_label }}</span>
+                <span>{{ current_panel.line_count }} lines</span>
+                <span>{{ current_panel.content_length }} chars</span>
+                <span>Last edited by {{ current_last_editor_label }}</span>
+                <span>{{ paste.updated_at.strftime('%Y-%m-%d %H:%M') if paste.updated_at else 'just now' }}</span>
+            </p>
+        </header>
+        <div class="compare-panel-body">
+            {% if current_panel.rendered_markdown %}
+            <article class="prose markdown-body">{{ current_panel.rendered_markdown }}</article>
+            {% else %}
+            <div class="code-view" data-view-syntax="{{ current_panel.resolved_view_syntax }}">
+                {% for line in current_panel.lines %}
+                <div class="code-line" id="current-L{{ line.number }}">
+                    <a class="line-no" href="#current-L{{ line.number }}">{{ line.number }}</a>
+                    <code class="line-code">{{ line.html }}</code>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </article>
+
+    <article class="surface compare-panel">
+        <header class="compare-panel-header">
+            <p class="eyebrow">Snapshot v{{ revision.revision_number }}</p>
+            <div class="compare-panel-title">
+                <strong>{{ revision.title or paste.slug }}</strong>
+                <span>{{ revision_panel.display_syntax }}</span>
+            </div>
+            <p class="compare-panel-meta">
+                <span>{{ revision_panel.view_mode_label }}</span>
+                <span>{{ revision_panel.line_count }} lines</span>
+                <span>{{ revision_panel.content_length }} chars</span>
+                <span>{{ revision_event_label }}</span>
+                <span>{{ revision_editor_label }}</span>
+                <span>{{ revision.created_at.strftime('%Y-%m-%d %H:%M') if revision.created_at else 'just now' }}</span>
+            </p>
+        </header>
+        <div class="compare-panel-body">
+            {% if revision_panel.rendered_markdown %}
+            <article class="prose markdown-body">{{ revision_panel.rendered_markdown }}</article>
+            {% else %}
+            <div class="code-view" data-view-syntax="{{ revision_panel.resolved_view_syntax }}">
+                {% for line in revision_panel.lines %}
+                <div class="code-line" id="revision-L{{ line.number }}">
+                    <a class="line-no" href="#revision-L{{ line.number }}">{{ line.number }}</a>
+                    <code class="line-code">{{ line.html }}</code>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </article>
+</section>
+{% endblock %}

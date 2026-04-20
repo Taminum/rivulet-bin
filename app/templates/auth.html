@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="surface surface-narrow auth-shell">
+    <p class="eyebrow">{{ "Register" if auth_mode == "register" else "Login" }}</p>
+    <h1>{{ title }}</h1>
+    <p class="mini-note">
+        {% if auth_mode == "register" %}
+        Create an account to keep your files in a personal profile.
+        {% else %}
+        Sign in to see and manage your saved files.
+        {% endif %}
+    </p>
+
+    {% if error %}
+    <div class="message error">{{ error }}</div>
+    {% endif %}
+
+    <form class="auth-form" method="post" action="/{{ auth_mode }}">
+        <input type="hidden" name="next_path" value="{{ next_path }}">
+
+        <label class="auth-field">
+            <span>Username</span>
+            <input type="text" name="username" maxlength="32" value="{{ form_values.username }}" placeholder="your_name" autocomplete="username" required>
+        </label>
+
+        <label class="auth-field">
+            <span>Password</span>
+            <input type="password" name="password" minlength="8" placeholder="At least 8 characters" autocomplete="{% if auth_mode == 'register' %}new-password{% else %}current-password{% endif %}" required>
+        </label>
+
+        {% if auth_mode == "register" %}
+        <label class="auth-field">
+            <span>Confirm Password</span>
+            <input type="password" name="confirm_password" minlength="8" placeholder="Repeat your password" autocomplete="new-password" required>
+        </label>
+        {% endif %}
+
+        <div class="form-actions">
+            <button type="submit" class="button primary">
+                {% if auth_mode == "register" %}Create account{% else %}Sign in{% endif %}
+            </button>
+            {% if auth_mode == "register" %}
+            <a class="button secondary" href="/login{% if next_path %}?next={{ next_path }}{% endif %}">Already have an account?</a>
+            {% else %}
+            <a class="button secondary" href="/register{% if next_path %}?next={{ next_path }}{% endif %}">Create account</a>
+            {% endif %}
+        </div>
+    </form>
+</section>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block body_class %}editor-page{% endblock %}
+{% block page_shell_class %}page-shell-editor{% endblock %}
+
+{% block topbar_editor %}
+<div class="topbar-editor">
+    <label class="topbar-field topbar-field-title">
+        <span>Title</span>
+        <input form="paste-form" type="text" name="title" maxlength="120" placeholder="Untitled" value="{{ form_values.title }}">
+    </label>
+    <label class="topbar-field topbar-field-tags">
+        <span>Tags</span>
+        <input form="paste-form" type="text" name="tags" maxlength="240" placeholder="#json #config" value="{{ form_values.tags }}">
+    </label>
+    <label class="topbar-field topbar-field-url">
+        <span>Custom URL</span>
+        <input form="paste-form" type="text" name="custom_slug" maxlength="64" placeholder="random" value="{{ form_values.custom_slug }}">
+    </label>
+    <label class="topbar-field topbar-field-compact">
+        <span>Mode</span>
+        <select form="paste-form" name="mode">
+            {% for value, label in mode_options %}
+            <option value="{{ value }}" {% if form_values.mode == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label class="topbar-field topbar-field-compact">
+        <span>Syntax</span>
+        <select form="paste-form" name="syntax" data-syntax-management="{{ syntax_management | default('manual') }}">
+            {% for value, label in syntax_options %}
+            <option value="{{ value }}" {% if form_values.syntax == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+</div>
+{% endblock %}
+
+{% block topbar_actions %}
+<button type="button" class="nav-button" data-history-open title="History (Ctrl+Shift+H)">History</button>
+<button type="submit" form="paste-form" class="button primary nav-button" title="Save (Ctrl+S)">Save</button>
+{% endblock %}
+
+{% block content %}
+<section class="surface surface-editor surface-editor-fullscreen">
+    {% if error %}
+    <div class="message error">{{ error }}</div>
+    {% endif %}
+
+    <form id="paste-form" class="paste-form paste-form-fullscreen" action="/publish" method="post" data-paste-form>
+        <label
+            class="editor-field editor-field-fullscreen {% if validation_error %}has-validation-error{% endif %}"
+            {% if validation_error %}
+            data-validation-line="{{ validation_error.line or '' }}"
+            data-validation-column="{{ validation_error.column or '' }}"
+            {% endif %}
+        >
+            <span class="validation-line-marker" aria-hidden="true"></span>
+            <textarea class="editor-source" name="content" rows="18" placeholder="Paste code, markdown, plain text, or a full URL here..." spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off">{{ form_values.content }}</textarea>
+        </label>
+    </form>
+</section>
+
+{% include "history_panel.html" %}
+{% endblock %}

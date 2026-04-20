@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="surface surface-narrow">
+    <h1>{{ paste.title or paste.slug }}</h1>
+    <p class="mini-note">
+        {% if paste.is_url %}Short link ready.{% else %}Paste saved.{% endif %}
+        {% if is_owned_by_current_user %} This file is now attached to your profile.{% endif %}
+    </p>
+    {% if tags %}
+    <div class="tag-list">
+        {% for tag in tags %}
+        <span class="tag-pill">#{{ tag }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="link-stack">
+        <label>
+            <span>Public URL</span>
+            <div class="inline-copy">
+                <input type="text" readonly value="{{ public_url }}">
+                <button type="button" class="button secondary" data-copy="{{ public_url }}">Copy</button>
+            </div>
+        </label>
+
+        {% if not paste.is_url %}
+        <label>
+            <span>Raw URL</span>
+            <div class="inline-copy">
+                <input type="text" readonly value="{{ raw_url }}">
+                <button type="button" class="button secondary" data-copy="{{ raw_url }}">Copy</button>
+            </div>
+        </label>
+        {% endif %}
+
+        {% if show_edit %}
+        <label>
+            <span>Private edit link</span>
+            <div class="inline-copy">
+                <input type="text" readonly value="{{ edit_url }}">
+                <button type="button" class="button secondary" data-copy="{{ edit_url }}">Copy</button>
+            </div>
+        </label>
+        {% endif %}
+    </div>
+
+    <div class="form-actions">
+        <a class="button primary" href="/{{ paste.slug }}">Open</a>
+        {% if show_edit %}
+        <a class="button secondary" href="{{ edit_url }}">Edit</a>
+        <a class="button secondary" href="{{ changes_url }}">Changes</a>
+        {% endif %}
+        {% if is_owned_by_current_user %}
+        <a class="button secondary" href="/account">Profile</a>
+        {% endif %}
+        <a class="button secondary" href="/">New</a>
+    </div>
+</section>
+{% endblock %}

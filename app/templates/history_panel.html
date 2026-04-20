@@ -1,0 +1,32 @@
+<div class="history-drawer" data-history-drawer aria-hidden="true">
+    <button type="button" class="history-backdrop" data-history-close aria-label="Close history"></button>
+    <aside class="history-panel">
+        <div class="history-panel-header">
+            <strong>Recent</strong>
+            <button type="button" class="history-close" data-history-close aria-label="Close history">Close</button>
+        </div>
+
+        {% if history_items %}
+        <div class="history-list">
+            {% for item in history_items %}
+            <article class="history-item {% if item.is_active %}active{% endif %}">
+                <a class="history-main" href="/{{ item.paste.slug }}" data-history-close>
+                    <strong>{{ item.paste.title or item.paste.slug }}</strong>
+                    <span>{{ item.paste.slug }}</span>
+                </a>
+                <div class="history-meta">
+                    <span>
+                        {% if item.paste.updated_at %}
+                        {{ item.paste.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                        {% endif %}
+                    </span>
+                    <a class="history-link" href="{{ item.edit_url }}" data-history-close>Edit</a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="history-empty">No saved files yet.</p>
+        {% endif %}
+    </aside>
+</div>

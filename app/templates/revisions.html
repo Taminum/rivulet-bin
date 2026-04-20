@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-titlebar">
+    <div>
+        <p class="eyebrow">Changes</p>
+        <h1>{{ paste.title or paste.slug }}</h1>
+        <p class="meta-line">
+            <span>{{ revision_count }} revisions</span>
+            <span>Created by {{ creator_label }}</span>
+            <span>Updated {{ paste.updated_at.strftime('%Y-%m-%d %H:%M') if paste.updated_at else 'just now' }}</span>
+        </p>
+    </div>
+    <div class="view-actions">
+        <a class="button secondary" href="{{ current_view_url }}">Current</a>
+        <a class="button secondary" href="{{ current_edit_url }}">Edit</a>
+        <a class="button secondary" href="/">New paste</a>
+    </div>
+</section>
+
+<section class="surface surface-narrow revisions-shell">
+    {% if revision_entries %}
+    <div class="revisions-list">
+        {% for item in revision_entries %}
+        {% set revision = item.revision %}
+        <article class="revision-card">
+            <div class="revision-main">
+                <strong>v{{ revision.revision_number }}</strong>
+                <span>{{ revision.title or paste.slug }}</span>
+            </div>
+            <div class="revision-meta">
+                <span>{{ "Created" if revision.event == "created" else "Saved" }}</span>
+                <span>{{ '@' ~ revision.editor.username if revision.editor else 'Guest' }}</span>
+                <span>{{ revision.created_at.strftime('%Y-%m-%d %H:%M') if revision.created_at else 'just now' }}</span>
+            </div>
+            <div class="revision-snippet">
+                {{ revision.syntax|upper }} · {{ revision.view_mode|capitalize }}
+            </div>
+            <div class="revision-actions">
+                <a class="button secondary" href="{{ item.snapshot_url }}">Open snapshot</a>
+                <a class="button secondary" href="{{ item.compare_url }}">Compare</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="history-empty">No revisions yet.</p>
+    {% endif %}
+</section>
+{% endblock %}

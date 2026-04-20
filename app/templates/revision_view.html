@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-titlebar">
+    <div>
+        <p class="eyebrow">Revision {{ revision.revision_number }}</p>
+        <h1>{{ paste.title or paste.slug }}</h1>
+        <p class="meta-line">
+            <span>{{ revision_event_label }}</span>
+            <span>{{ revision_editor_label }}</span>
+            <span>{{ revision.created_at.strftime('%Y-%m-%d %H:%M') if revision.created_at else 'just now' }}</span>
+            <span>{{ line_count }} lines</span>
+            <span>{{ content_length }} chars</span>
+        </p>
+    </div>
+    <div class="view-actions">
+        <a class="button secondary" href="{{ revisions_url }}">All changes</a>
+        <a class="button secondary" href="{{ compare_url }}">Compare</a>
+        <a class="button secondary" href="{{ current_view_url }}">Current</a>
+        <a class="button secondary" href="{{ current_edit_url }}">Edit current</a>
+    </div>
+</section>
+
+<section class="surface surface-viewer">
+    {% if rendered_markdown %}
+    <article class="prose markdown-body">{{ rendered_markdown }}</article>
+    {% else %}
+    <div class="code-view" data-view-syntax="{{ resolved_view_syntax }}">
+        {% for line in lines %}
+        <div class="code-line" id="L{{ line.number }}">
+            <a class="line-no" href="#L{{ line.number }}">{{ line.number }}</a>
+            <code class="line-code">{{ line.html }}</code>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

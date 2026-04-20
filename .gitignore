@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+smoke.db
+pastebin.db
+smoke-*.db
+.env
+backups/
+.vscode/
+.idea/

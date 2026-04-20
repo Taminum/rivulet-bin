@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-titlebar">
+    <div>
+        <p class="eyebrow">Profile</p>
+        <h1>@{{ current_user.username }}</h1>
+        <p class="meta-line">
+            <span>{{ owned_count }} saved</span>
+            <span>{{ shared_count }} shared</span>
+            <span>Account created {{ current_user.created_at.strftime('%Y-%m-%d %H:%M') if current_user.created_at else 'just now' }}</span>
+        </p>
+    </div>
+    <div class="view-actions account-toolbar">
+        <div class="account-sections" role="tablist" aria-label="Profile sections">
+            <a
+                class="nav-button account-section-link {% if account_tab == 'saved' %}is-active{% endif %}"
+                href="{{ saved_tab_url }}"
+                aria-current="{% if account_tab == 'saved' %}page{% else %}false{% endif %}"
+            >
+                Saved
+                <span>{{ owned_count }}</span>
+            </a>
+            <a
+                class="nav-button account-section-link {% if account_tab == 'shared' %}is-active{% endif %}"
+                href="{{ shared_tab_url }}"
+                aria-current="{% if account_tab == 'shared' %}page{% else %}false{% endif %}"
+            >
+                Shared
+                <span>{{ shared_count }}</span>
+            </a>
+        </div>
+        <div class="account-view-toggle" role="group" aria-label="Profile layout">
+            <button class="nav-button account-view-button" type="button" data-account-view-toggle data-view="cards" data-active="true" aria-pressed="true">
+                Cards
+            </button>
+            <button class="nav-button account-view-button" type="button" data-account-view-toggle data-view="list" data-active="false" aria-pressed="false">
+                List
+            </button>
+        </div>
+        <a class="button primary" href="/">New paste</a>
+    </div>
+</section>
+
+{% if account_message %}
+<p class="message success">{{ account_message }}</p>
+{% endif %}
+
+{% if active_tag %}
+<section class="surface surface-narrow account-filter-shell">
+    <div class="account-filter-bar">
+        <div class="account-filter-copy">
+            <p class="eyebrow">Tag filter</p>
+            <strong>#{{ active_tag }}</strong>
+            <p class="mini-note">{{ profile_count }} matching documents in {{ account_tab }}.</p>
+        </div>
+        <a class="button secondary" href="{{ clear_tag_url }}">Clear filter</a>
+    </div>
+</section>
+{% endif %}
+
+<section class="account-shell" data-account-view="cards" data-account-view-default="cards">
+    {% if profile_items %}
+    <div class="account-list">
+        {% for item in profile_items %}
+        <article class="account-card" data-preview-kind="{{ item.preview_kind }}">
+            <a class="account-preview" href="/{{ item.paste.slug }}">
+                <div class="account-preview-topline">
+                    <span class="account-preview-pill">{{ item.preview_label }}</span>
+                    {% if item.is_shared %}
+                    <span class="account-preview-state">Shared</span>
+                    {% endif %}
+                </div>
+                <div class="account-preview-body account-preview-body-{{ item.preview_kind }}">
+                    {% if item.preview_kind == "link" %}
+                    <span class="account-preview-link-label">Shortened link</span>
+                    <strong class="account-preview-link">{{ item.preview_text }}</strong>
+                    {% else %}
+                    <pre class="account-preview-code">{{ item.preview_text }}</pre>
+                    {% endif %}
+                </div>
+            </a>
+            <div class="account-card-body">
+                <div class="account-main">
+                    <strong>{{ item.paste.title or item.paste.slug }}</strong>
+                    <span>{{ item.paste.slug }}</span>
+                </div>
+                <div class="account-meta">
+                    <span>{{ item.display_syntax }}</span>
+                    <span>{{ item.paste.view_mode|capitalize }}</span>
+                    {% if item.is_shared %}
+                    <span>Shared</span>
+                    {% endif %}
+                    <span>{{ item.paste.updated_at.strftime('%Y-%m-%d %H:%M') if item.paste.updated_at else 'just now' }}</span>
+                </div>
+                {% if item.tags %}
+                <div class="tag-list tag-list-compact">
+                    {% for tag in item.tags %}
+                    <a
+                        class="tag-pill tag-pill-link {% if active_tag == tag %}is-active{% endif %}"
+                        href="/account?tab={{ account_tab }}&tag={{ tag }}"
+                    >
+                        #{{ tag }}
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <div class="account-people">
+                    <span>Created by {{ item.creator_label }}</span>
+                    <span>Last edited by {{ item.last_editor_label }}</span>
+                </div>
+                <div class="account-actions">
+                    <a class="button secondary" href="/{{ item.paste.slug }}">Open</a>
+                    <a class="button secondary" href="{{ item.edit_url }}">Edit</a>
+                    <a class="button secondary" href="/raw/{{ item.paste.slug }}">Raw</a>
+                    <button
+                        class="button secondary"
+                        type="button"
+                        data-share-open
+                        data-share-title="{{ item.paste.title or item.paste.slug }}"
+                        data-share-slug="{{ item.paste.slug }}"
+                        data-share-public-url="{{ item.public_url }}"
+                        data-share-raw-url="{{ item.raw_url }}"
+                        data-share-edit-url="{{ item.share_edit_url }}"
+                        data-share-has-raw="{{ 'true' if not item.paste.is_url else 'false' }}"
+                    >
+                        Share
+                    </button>
+                    {% if item.can_manage_tags %}
+                    <button
+                        class="button secondary"
+                        type="button"
+                        data-tags-open
+                        data-tags-slug="{{ item.paste.slug }}"
+                        data-tags-title="{{ item.paste.title or item.paste.slug }}"
+                        data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}"
+                        data-tags-tab="{{ account_tab }}"
+                        data-tags-filter="{{ active_tag or '' }}"
+                    >
+                        Tags
+                    </button>
+                    {% endif %}
+                    <a class="button secondary" href="{{ item.changes_url }}">Changes</a>
+                    {% if item.can_delete %}
+                    <form method="post" action="/account/delete/{{ item.paste.slug }}" data-delete-form data-delete-label="{{ item.paste.title or item.paste.slug }}">
+                        <button class="button danger" type="submit">Delete</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="history-empty">
+        {% if active_tag %}
+        No documents with #{{ active_tag }} in this section yet.
+        {% elif account_tab == 'shared' %}
+        No shared documents yet. Open a private edit link while signed in and it will appear here.
+        {% else %}
+        No files saved to your profile yet. Publish a new paste while signed in and it will appear here.
+        {% endif %}
+    </p>
+    {% endif %}
+</section>
+
+<div class="share-dialog" data-tags-dialog data-open="false" aria-hidden="true">
+    <button class="share-backdrop" type="button" data-tags-close aria-label="Close tags dialog"></button>
+    <section class="share-panel surface surface-narrow" role="dialog" aria-modal="true" aria-labelledby="tags-dialog-title">
+        <div class="share-panel-header">
+            <div>
+                <p class="eyebrow">Tags</p>
+                <h2 id="tags-dialog-title" data-tags-dialog-title>Edit tags</h2>
+                <p class="mini-note" data-tags-dialog-slug></p>
+            </div>
+            <button class="history-close" type="button" data-tags-close>Close</button>
+        </div>
+
+        <form method="post" data-tags-form class="auth-form">
+            <input type="hidden" name="tab" value="{{ account_tab }}" data-tags-form-tab>
+            <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}" data-tags-form-filter>
+            <label class="auth-field">
+                <span>Tags</span>
+                <input type="text" name="tags" maxlength="240" placeholder="#json #config" data-tags-input>
+            </label>
+            <p class="mini-note">Use spaces or commas. Example: `#json #xray #notes`</p>
+            <div class="form-actions">
+                <button type="submit" class="button primary">Save tags</button>
+                <button type="button" class="button secondary" data-tags-close>Cancel</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<div class="share-dialog" data-share-dialog data-open="false" aria-hidden="true">
+    <button class="share-backdrop" type="button" data-share-close aria-label="Close share dialog"></button>
+    <section class="share-panel surface surface-narrow" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
+        <div class="share-panel-header">
+            <div>
+                <p class="eyebrow">Share</p>
+                <h2 id="share-dialog-title" data-share-dialog-title>Paste links</h2>
+                <p class="mini-note" data-share-dialog-slug></p>
+            </div>
+            <button class="history-close" type="button" data-share-close>Close</button>
+        </div>
+
+        <div class="link-stack">
+            <label>
+                <span>Public URL</span>
+                <div class="inline-copy">
+                    <input type="text" readonly data-share-input="public">
+                    <button type="button" class="button secondary" data-copy data-share-copy="public">Copy</button>
+                </div>
+            </label>
+
+            <label data-share-row="raw">
+                <span>Raw URL</span>
+                <div class="inline-copy">
+                    <input type="text" readonly data-share-input="raw">
+                    <button type="button" class="button secondary" data-copy data-share-copy="raw">Copy</button>
+                </div>
+            </label>
+
+            <label data-share-row="edit">
+                <span>Private edit link</span>
+                <div class="inline-copy">
+                    <input type="text" readonly data-share-input="edit">
+                    <button type="button" class="button secondary" data-copy data-share-copy="edit">Copy</button>
+                </div>
+            </label>
+        </div>
+    </section>
+</div>
+{% endblock %}
