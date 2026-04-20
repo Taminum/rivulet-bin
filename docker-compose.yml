@@ -2,6 +2,15 @@ services:
   app:
     image: ghcr.io/taminum/rivulet-bin:latest
     container_name: rivulet-app
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "15212"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/rivulet
       SITE_NAME: Rivulet Bin
