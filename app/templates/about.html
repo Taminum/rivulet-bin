@@ -1,17 +1,77 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="surface surface-narrow prose">
-    <h1>{{ site_name }}</h1>
-    <p>
-        {{ t("about.copy") }}
-    </p>
-    <ul>
-        <li>{{ t("about.item_public") }}</li>
-        <li>{{ t("about.item_markdown") }}</li>
-        <li>{{ t("about.item_links") }}</li>
-        <li>{{ t("about.item_private") }}</li>
-        <li>{{ t("about.item_docker") }}</li>
-    </ul>
-</section>
+<div class="about-shell">
+    <section class="surface about-hero">
+        <p class="eyebrow">{{ t("about.hero_eyebrow") }}</p>
+        <h1>{{ site_name }}</h1>
+        <p class="about-copy">{{ t("about.hero_copy") }}</p>
+        <p class="about-copy">{{ t("about.copy") }}</p>
+    </section>
+
+    <section class="about-grid" aria-label="{{ t('site.about') }}">
+        <article class="surface about-card">
+            <p class="eyebrow">{{ t("home.field_mode") }}</p>
+            <h2>{{ t("about.card_editor_title") }}</h2>
+            <p>{{ t("about.card_editor_copy") }}</p>
+            <ul class="about-list">
+                <li>{{ t("about.card_editor_item_1") }}</li>
+                <li>{{ t("about.card_editor_item_2") }}</li>
+                <li>{{ t("about.card_editor_item_3") }}</li>
+            </ul>
+        </article>
+
+        <article class="surface about-card">
+            <p class="eyebrow">{{ t("common.share") }}</p>
+            <h2>{{ t("about.card_collab_title") }}</h2>
+            <p>{{ t("about.card_collab_copy") }}</p>
+            <ul class="about-list">
+                <li>{{ t("about.card_collab_item_1") }}</li>
+                <li>{{ t("about.card_collab_item_2") }}</li>
+                <li>{{ t("about.card_collab_item_3") }}</li>
+            </ul>
+        </article>
+
+        <article class="surface about-card">
+            <p class="eyebrow">{{ t("site.profile") }}</p>
+            <h2>{{ t("about.card_workspace_title") }}</h2>
+            <p>{{ t("about.card_workspace_copy") }}</p>
+            <ul class="about-list">
+                <li>{{ t("about.card_workspace_item_1") }}</li>
+                <li>{{ t("about.card_workspace_item_2") }}</li>
+                <li>{{ t("about.card_workspace_item_3") }}</li>
+            </ul>
+        </article>
+
+        <article class="surface about-card">
+            <p class="eyebrow">{{ t("common.settings") }}</p>
+            <h2>{{ t("about.card_hosting_title") }}</h2>
+            <p>{{ t("about.card_hosting_copy") }}</p>
+            <ul class="about-list">
+                <li>{{ t("about.card_hosting_item_1") }}</li>
+                <li>{{ t("about.card_hosting_item_2") }}</li>
+                <li>{{ t("about.card_hosting_item_3") }}</li>
+            </ul>
+        </article>
+    </section>
+
+    <section class="surface about-flow">
+        <p class="eyebrow">{{ t("about.flow_eyebrow") }}</p>
+        <h2>{{ t("about.flow_title") }}</h2>
+        <div class="about-steps">
+            <article class="about-step">
+                <strong>{{ t("about.flow_step_1_title") }}</strong>
+                <p>{{ t("about.flow_step_1_copy") }}</p>
+            </article>
+            <article class="about-step">
+                <strong>{{ t("about.flow_step_2_title") }}</strong>
+                <p>{{ t("about.flow_step_2_copy") }}</p>
+            </article>
+            <article class="about-step">
+                <strong>{{ t("about.flow_step_3_title") }}</strong>
+                <p>{{ t("about.flow_step_3_copy") }}</p>
+            </article>
+        </div>
+    </section>
+</div>
 {% endblock %}
