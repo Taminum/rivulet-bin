@@ -4,8 +4,8 @@
 <section class="surface surface-narrow">
     <h1>{{ paste.title or paste.slug }}</h1>
     <p class="mini-note">
-        {% if paste.is_url %}Short link ready.{% else %}Paste saved.{% endif %}
-        {% if is_owned_by_current_user %} This file is now attached to your profile.{% endif %}
+        {% if paste.is_url %}{{ t("success.short_link_ready") }}{% else %}{{ t("success.paste_saved") }}{% endif %}
+        {% if is_owned_by_current_user %} {{ t("success.attached_profile") }}{% endif %}
     </p>
     {% if tags %}
     <div class="tag-list">
@@ -15,46 +15,46 @@
     </div>
     {% endif %}
 
-    <div class="link-stack">
+        <div class="link-stack">
         <label>
-            <span>Public URL</span>
+            <span>{{ t("success.public_url") }}</span>
             <div class="inline-copy">
                 <input type="text" readonly value="{{ public_url }}">
-                <button type="button" class="button secondary" data-copy="{{ public_url }}">Copy</button>
+                <button type="button" class="button secondary" data-copy="{{ public_url }}">{{ t("common.copy") }}</button>
             </div>
         </label>
 
         {% if not paste.is_url %}
         <label>
-            <span>Raw URL</span>
+            <span>{{ t("success.raw_url") }}</span>
             <div class="inline-copy">
                 <input type="text" readonly value="{{ raw_url }}">
-                <button type="button" class="button secondary" data-copy="{{ raw_url }}">Copy</button>
+                <button type="button" class="button secondary" data-copy="{{ raw_url }}">{{ t("common.copy") }}</button>
             </div>
         </label>
         {% endif %}
 
         {% if show_edit %}
         <label>
-            <span>Private edit link</span>
+            <span>{{ t("success.edit_url") }}</span>
             <div class="inline-copy">
                 <input type="text" readonly value="{{ edit_url }}">
-                <button type="button" class="button secondary" data-copy="{{ edit_url }}">Copy</button>
+                <button type="button" class="button secondary" data-copy="{{ edit_url }}">{{ t("common.copy") }}</button>
             </div>
         </label>
         {% endif %}
     </div>
 
     <div class="form-actions">
-        <a class="button primary" href="/{{ paste.slug }}">Open</a>
+        <a class="button primary" href="/{{ paste.slug }}">{{ t("common.open") }}</a>
         {% if show_edit %}
-        <a class="button secondary" href="{{ edit_url }}">Edit</a>
-        <a class="button secondary" href="{{ changes_url }}">Changes</a>
+        <a class="button secondary" href="{{ edit_url }}">{{ t("common.edit") }}</a>
+        <a class="button secondary" href="{{ changes_url }}">{{ t("common.changes") }}</a>
         {% endif %}
         {% if is_owned_by_current_user %}
-        <a class="button secondary" href="/account">Profile</a>
+        <a class="button secondary" href="/account">{{ t("success.profile") }}</a>
         {% endif %}
-        <a class="button secondary" href="/">New</a>
+        <a class="button secondary" href="/">{{ t("success.new") }}</a>
     </div>
 </section>
 {% endblock %}

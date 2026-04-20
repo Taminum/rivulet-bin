@@ -1,12 +1,18 @@
 const forms = document.querySelectorAll("[data-paste-form]");
+const UI_MESSAGES = window.RIVULET_UI || {};
 const THEME_KEY = "colorTheme";
 const THEME_VALUES = ["dark", "light", "auto"];
 const ACCOUNT_VIEW_KEY = "accountView";
 const ACCOUNT_VIEW_VALUES = ["cards", "list"];
+const ACCOUNT_SIDEBAR_KEY = "accountSidebarCollapsed";
 const historyDrawer = document.querySelector("[data-history-drawer]");
+const accountLayout = document.querySelector("[data-account-layout]");
 const accountShell = document.querySelector("[data-account-view-default]");
+const bookmarkDialog = document.querySelector("[data-bookmark-dialog]");
 const tagsDialog = document.querySelector("[data-tags-dialog]");
 const shareDialog = document.querySelector("[data-share-dialog]");
+const notePreviewDialog = document.querySelector("[data-note-preview-dialog]");
+const preferencesForm = document.querySelector("[data-preferences-form]");
 const SQL_START_RE = /^\s*(select|with|insert|update|delete|create|alter|drop)\b/i;
 const HTML_START_RE = /^\s*<(?:!doctype|html|head|body|div|span|script|style|main|section|article|\w+-\w+)/i;
 const CSS_RE = /(^|})\s*[^{}\n]+?\{\s*[^{}:;\n]+:\s*[^{};\n]+;\s*[^{}]*\}/s;
@@ -17,6 +23,18 @@ const TYPESCRIPT_RE = /\b(interface|type|enum|implements|readonly|public|private
 const JAVASCRIPT_RE = /\b(const|let|var|function|console\.|document\.|window\.|import\s|export\s)\b|=>/;
 const TEXT_WORD_RE = /[A-Za-zА-Яа-яЁё]{2,}/g;
 
+function themeLabel(themePreference) {
+  return UI_MESSAGES.themeLabels?.[themePreference] || themePreference[0].toUpperCase() + themePreference.slice(1);
+}
+
+function formatMessage(template, replacements = {}) {
+  return String(template || "").replace(/\{(\w+)\}/g, (_match, key) => String(replacements[key] ?? `{${key}}`));
+}
+
+function getAccountViewStorageKey() {
+  return accountShell?.dataset.accountViewStorageKey || ACCOUNT_VIEW_KEY;
+}
+
 function applyTheme(themePreference) {
   const nextPreference = THEME_VALUES.includes(themePreference) ? themePreference : "auto";
   const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -26,8 +44,8 @@ function applyTheme(themePreference) {
   document.documentElement.dataset.themePreference = nextPreference;
 
   for (const button of document.querySelectorAll("[data-theme-toggle]")) {
-    button.textContent = nextPreference[0].toUpperCase() + nextPreference.slice(1);
-    button.setAttribute("title", `Theme: ${nextPreference}`);
+    button.textContent = themeLabel(nextPreference);
+    button.setAttribute("title", themeLabel(nextPreference));
   }
 }
 
@@ -140,6 +158,29 @@ function setShareDialogOpen(isOpen) {
   document.body.classList.toggle("share-open", isOpen);
 }
 
+function setBookmarkDialogOpen(isOpen) {
+  if (!bookmarkDialog) {
+    return;
+  }
+
+  bookmarkDialog.setAttribute("data-open", isOpen ? "true" : "false");
+  bookmarkDialog.setAttribute("aria-hidden", isOpen ? "false" : "true");
+  document.body.classList.toggle("bookmark-open", isOpen);
+
+  if (isOpen) {
+    const input = bookmarkDialog.querySelector('[data-bookmark-input="url"]')
+      || bookmarkDialog.querySelector('[data-bookmark-input="title"]');
+    if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+      window.requestAnimationFrame(() => {
+        input.focus();
+        if (input instanceof HTMLInputElement) {
+          input.select();
+        }
+      });
+    }
+  }
+}
+
 function setTagsDialogOpen(isOpen) {
   if (!tagsDialog) {
     return;
@@ -157,6 +198,75 @@ function setTagsDialogOpen(isOpen) {
         input.select();
       });
     }
+  }
+}
+
+function setNotePreviewDialogOpen(isOpen) {
+  if (!notePreviewDialog) {
+    return;
+  }
+
+  notePreviewDialog.setAttribute("data-open", isOpen ? "true" : "false");
+  notePreviewDialog.setAttribute("aria-hidden", isOpen ? "false" : "true");
+  document.body.classList.toggle("note-preview-open", isOpen);
+
+  if (isOpen) {
+    const button = notePreviewDialog.querySelector("[data-note-preview-close]");
+    if (button instanceof HTMLButtonElement) {
+      window.requestAnimationFrame(() => {
+        button.focus();
+      });
+    }
+  }
+}
+
+function populateBookmarkDialog(button = null) {
+  if (!bookmarkDialog) {
+    return;
+  }
+
+  const mode = button?.getAttribute("data-bookmark-mode") || "create";
+  const action = button?.getAttribute("data-bookmark-action") || "/account/bookmarks";
+  const heading = button?.getAttribute("data-bookmark-heading") || "New bookmark";
+  const caption = button?.getAttribute("data-bookmark-caption") || "Save a private link for quick access.";
+  const filterTag = button?.getAttribute("data-bookmark-filter") || "";
+  const values = {
+    title: button?.getAttribute("data-bookmark-value-title") || "",
+    url: button?.getAttribute("data-bookmark-value-url") || "",
+    description: button?.getAttribute("data-bookmark-value-description") || "",
+    tags: (button?.getAttribute("data-bookmark-value-tags") || "").trim(),
+  };
+
+  const titleNode = bookmarkDialog.querySelector("[data-bookmark-dialog-title]");
+  const captionNode = bookmarkDialog.querySelector("[data-bookmark-dialog-caption]");
+  const submitNode = bookmarkDialog.querySelector("[data-bookmark-submit]");
+  const form = bookmarkDialog.querySelector("[data-bookmark-form]");
+  const filterInput = bookmarkDialog.querySelector("[data-bookmark-form-filter]");
+  const errorNode = bookmarkDialog.querySelector(".message.error");
+
+  if (titleNode) {
+    titleNode.textContent = heading;
+  }
+  if (captionNode) {
+    captionNode.textContent = caption;
+  }
+  if (submitNode) {
+    submitNode.textContent = mode === "edit" ? "Save changes" : "Save bookmark";
+  }
+  if (form instanceof HTMLFormElement) {
+    form.action = action;
+  }
+  if (filterInput instanceof HTMLInputElement) {
+    filterInput.value = filterTag;
+  }
+  for (const [field, value] of Object.entries(values)) {
+    const input = bookmarkDialog.querySelector(`[data-bookmark-input="${field}"]`);
+    if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+      input.value = value;
+    }
+  }
+  if (errorNode instanceof HTMLElement) {
+    errorNode.hidden = true;
   }
 }
 
@@ -189,7 +299,7 @@ function populateShareDialog(button) {
     }
     if (copyButton) {
       copyButton.setAttribute("data-copy", value);
-      copyButton.textContent = "Copy";
+      copyButton.textContent = UI_MESSAGES.copy || "Copy";
     }
   }
 
@@ -204,6 +314,7 @@ function populateTagsDialog(button) {
     return;
   }
 
+  const action = button.getAttribute("data-tags-action") || "";
   const slug = button.getAttribute("data-tags-slug") || "";
   const title = button.getAttribute("data-tags-title") || slug || "Edit tags";
   const value = (button.getAttribute("data-tags-value") || "").trim();
@@ -224,7 +335,7 @@ function populateTagsDialog(button) {
     slugNode.textContent = slug;
   }
   if (form instanceof HTMLFormElement) {
-    form.action = `/account/tags/${slug}`;
+    form.action = action || `/account/tags/${slug}`;
   }
   if (input instanceof HTMLInputElement) {
     input.value = value;
@@ -234,6 +345,36 @@ function populateTagsDialog(button) {
   }
   if (filterInput instanceof HTMLInputElement) {
     filterInput.value = filterTag;
+  }
+}
+
+function populateNotePreviewDialog(button) {
+  if (!notePreviewDialog || !button) {
+    return;
+  }
+
+  const card = button.closest(".account-card");
+  const payload = card?.querySelector("[data-note-preview-payload]");
+  const title = button.getAttribute("data-note-preview-title") || "Note";
+  const meta = button.getAttribute("data-note-preview-meta") || "";
+  const updated = button.getAttribute("data-note-preview-updated") || "";
+
+  const titleNode = notePreviewDialog.querySelector("[data-note-preview-title]");
+  const metaNode = notePreviewDialog.querySelector("[data-note-preview-meta]");
+  const updatedNode = notePreviewDialog.querySelector("[data-note-preview-updated]");
+  const contentNode = notePreviewDialog.querySelector("[data-note-preview-content]");
+
+  if (titleNode) {
+    titleNode.textContent = title;
+  }
+  if (metaNode) {
+    metaNode.textContent = meta;
+  }
+  if (updatedNode) {
+    updatedNode.textContent = updated ? `Updated ${updated}` : "";
+  }
+  if (contentNode instanceof HTMLElement) {
+    contentNode.innerHTML = payload instanceof HTMLElement ? payload.innerHTML : "<p>No content</p>";
   }
 }
 
@@ -253,6 +394,14 @@ function setAccountView(viewPreference) {
   }
 }
 
+function setAccountSidebarCollapsed(isCollapsed) {
+  if (!accountLayout) {
+    return;
+  }
+
+  accountLayout.dataset.accountSidebarCollapsed = isCollapsed ? "true" : "false";
+}
+
 function getAssociatedField(form, name) {
   return document.querySelector(`[form="${form.id}"][name="${name}"]`) || form.querySelector(`[name="${name}"]`);
 }
@@ -261,12 +410,29 @@ function looksLikeJson(content) {
   return Boolean(content) && /^[\[{]/.test(content);
 }
 
+function looksLikeUrlText(content) {
+  if (!content || /\s/.test(content)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(content);
+    return ["http:", "https:"].includes(parsed.protocol) && Boolean(parsed.host);
+  } catch {
+    return false;
+  }
+}
+
 function looksLikeYaml(content) {
   if (content.startsWith("---")) {
     return true;
   }
 
   if (content.startsWith("{") || content.startsWith("[")) {
+    return false;
+  }
+
+  if (looksLikeUrlText(content)) {
     return false;
   }
 
@@ -323,6 +489,10 @@ function isSyntaxAutoManaged(syntaxField) {
 function detectSyntaxFromText(content) {
   const trimmed = content.trim();
   if (!trimmed) {
+    return "auto";
+  }
+
+  if (looksLikeUrlText(trimmed)) {
     return "auto";
   }
 
@@ -768,14 +938,17 @@ function initializePlainTextarea(form, textarea, syntaxField, modeField, wrapper
   });
 }
 
-applyTheme(localStorage.getItem(THEME_KEY) || "dark");
+applyTheme(localStorage.getItem(THEME_KEY) || document.documentElement.dataset.themePreference || "dark");
 setHistoryOpen(false);
-setAccountView(localStorage.getItem(ACCOUNT_VIEW_KEY) || accountShell?.dataset.accountViewDefault || "cards");
+setBookmarkDialogOpen(bookmarkDialog?.getAttribute("data-open") === "true");
+setNotePreviewDialogOpen(false);
+setAccountSidebarCollapsed(localStorage.getItem(ACCOUNT_SIDEBAR_KEY) === "true");
+setAccountView(localStorage.getItem(getAccountViewStorageKey()) || accountShell?.dataset.accountViewDefault || "cards");
 
 const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 if (typeof mediaQuery.addEventListener === "function") {
   mediaQuery.addEventListener("change", () => {
-    if ((localStorage.getItem(THEME_KEY) || "auto") === "auto") {
+    if ((localStorage.getItem(THEME_KEY) || document.documentElement.dataset.themePreference || "auto") === "auto") {
       applyTheme("auto");
     }
   });
@@ -783,7 +956,7 @@ if (typeof mediaQuery.addEventListener === "function") {
 
 for (const button of document.querySelectorAll("[data-theme-toggle]")) {
   button.addEventListener("click", () => {
-    const current = localStorage.getItem(THEME_KEY) || "dark";
+    const current = localStorage.getItem(THEME_KEY) || document.documentElement.dataset.themePreference || "dark";
     const nextIndex = (THEME_VALUES.indexOf(current) + 1) % THEME_VALUES.length;
     const nextTheme = THEME_VALUES[nextIndex];
     localStorage.setItem(THEME_KEY, nextTheme);
@@ -794,8 +967,22 @@ for (const button of document.querySelectorAll("[data-theme-toggle]")) {
 for (const button of document.querySelectorAll("[data-account-view-toggle]")) {
   button.addEventListener("click", () => {
     const nextView = button.dataset.view || "cards";
-    localStorage.setItem(ACCOUNT_VIEW_KEY, nextView);
+    localStorage.setItem(getAccountViewStorageKey(), nextView);
     setAccountView(nextView);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-account-sidebar-toggle]")) {
+  button.addEventListener("click", () => {
+    localStorage.setItem(ACCOUNT_SIDEBAR_KEY, "true");
+    setAccountSidebarCollapsed(true);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-account-sidebar-show]")) {
+  button.addEventListener("click", () => {
+    localStorage.setItem(ACCOUNT_SIDEBAR_KEY, "false");
+    setAccountSidebarCollapsed(false);
   });
 }
 
@@ -814,6 +1001,7 @@ for (const button of document.querySelectorAll("[data-history-close]")) {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     setHistoryOpen(false);
+    setBookmarkDialogOpen(false);
     setTagsDialogOpen(false);
     setShareDialogOpen(false);
   }
@@ -850,7 +1038,7 @@ for (const button of document.querySelectorAll("[data-copy]")) {
 
     await navigator.clipboard.writeText(value);
     const original = button.textContent;
-    button.textContent = "Copied";
+    button.textContent = UI_MESSAGES.copied || "Copied";
     setTimeout(() => {
       button.textContent = original;
     }, 1400);
@@ -860,10 +1048,23 @@ for (const button of document.querySelectorAll("[data-copy]")) {
 for (const form of document.querySelectorAll("[data-delete-form]")) {
   form.addEventListener("submit", (event) => {
     const label = form.getAttribute("data-delete-label") || "this paste";
-    const confirmed = window.confirm(`Delete "${label}"? This action cannot be undone.`);
+    const confirmed = window.confirm(
+      formatMessage(UI_MESSAGES.deleteConfirm || 'Delete "{label}"? This action cannot be undone.', { label }),
+    );
     if (!confirmed) {
       event.preventDefault();
     }
+  });
+}
+
+if (preferencesForm instanceof HTMLFormElement) {
+  preferencesForm.addEventListener("submit", () => {
+    const select = preferencesForm.querySelector('[name="theme_preference"]');
+    if (!(select instanceof HTMLSelectElement)) {
+      return;
+    }
+
+    localStorage.setItem(THEME_KEY, select.value || "dark");
   });
 }
 
@@ -871,6 +1072,26 @@ for (const button of document.querySelectorAll("[data-share-open]")) {
   button.addEventListener("click", () => {
     populateShareDialog(button);
     setShareDialogOpen(true);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-bookmark-open]")) {
+  button.addEventListener("click", () => {
+    populateBookmarkDialog(button);
+    setBookmarkDialogOpen(true);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-bookmark-open-new]")) {
+  button.addEventListener("click", () => {
+    populateBookmarkDialog(button);
+    setBookmarkDialogOpen(true);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-bookmark-close]")) {
+  button.addEventListener("click", () => {
+    setBookmarkDialogOpen(false);
   });
 }
 
@@ -890,5 +1111,18 @@ for (const button of document.querySelectorAll("[data-tags-close]")) {
 for (const button of document.querySelectorAll("[data-share-close]")) {
   button.addEventListener("click", () => {
     setShareDialogOpen(false);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-note-preview-open]")) {
+  button.addEventListener("click", () => {
+    populateNotePreviewDialog(button);
+    setNotePreviewDialogOpen(true);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-note-preview-close]")) {
+  button.addEventListener("click", () => {
+    setNotePreviewDialogOpen(false);
   });
 }

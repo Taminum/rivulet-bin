@@ -4,14 +4,14 @@
 <section class="surface surface-narrow prose">
     <h1>{{ site_name }}</h1>
     <p>
-        Minimal self-hosted pastebin with short links, markdown rendering, syntax highlighting, and private edit URLs.
+        {{ t("about.copy") }}
     </p>
     <ul>
-        <li>Public paste pages</li>
-        <li>Markdown support</li>
-        <li>Short links</li>
-        <li>Private edit links</li>
-        <li>Docker + Postgres</li>
+        <li>{{ t("about.item_public") }}</li>
+        <li>{{ t("about.item_markdown") }}</li>
+        <li>{{ t("about.item_links") }}</li>
+        <li>{{ t("about.item_private") }}</li>
+        <li>{{ t("about.item_docker") }}</li>
     </ul>
 </section>
 {% endblock %}

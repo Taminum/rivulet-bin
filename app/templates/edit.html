@@ -6,19 +6,19 @@
 {% block topbar_editor %}
 <div class="topbar-editor">
     <label class="topbar-field topbar-field-title">
-        <span>Title</span>
-        <input form="edit-form" type="text" name="title" maxlength="120" placeholder="Untitled" value="{{ form_values.title }}">
+        <span>{{ t("home.field_title") }}</span>
+        <input form="edit-form" type="text" name="title" maxlength="120" placeholder="{{ t('home.title_placeholder') }}" value="{{ form_values.title }}">
     </label>
     <label class="topbar-field topbar-field-tags">
-        <span>Tags</span>
-        <input form="edit-form" type="text" name="tags" maxlength="240" placeholder="#json #config" value="{{ form_values.tags }}">
+        <span>{{ t("home.field_tags") }}</span>
+        <input form="edit-form" type="text" name="tags" maxlength="240" placeholder="{{ t('home.tags_placeholder') }}" value="{{ form_values.tags }}">
     </label>
     <label class="topbar-field topbar-field-url">
-        <span>Custom URL</span>
+        <span>{{ t("home.field_custom_url") }}</span>
         <input form="edit-form" type="text" name="custom_slug" maxlength="64" value="{{ form_values.custom_slug }}">
     </label>
     <label class="topbar-field topbar-field-compact">
-        <span>Mode</span>
+        <span>{{ t("home.field_mode") }}</span>
         <select form="edit-form" name="mode">
             {% for value, label in mode_options %}
             <option value="{{ value }}" {% if form_values.mode == value %}selected{% endif %}>{{ label }}</option>
@@ -26,7 +26,7 @@
         </select>
     </label>
     <label class="topbar-field topbar-field-compact">
-        <span>Syntax</span>
+        <span>{{ t("home.field_syntax") }}</span>
         <select form="edit-form" name="syntax" data-syntax-management="{{ syntax_management | default('manual') }}">
             {% for value, label in syntax_options %}
             <option value="{{ value }}" {% if form_values.syntax == value %}selected{% endif %}>{{ label }}</option>
@@ -37,16 +37,16 @@
 {% endblock %}
 
 {% block topbar_actions %}
-<button type="button" class="nav-button" data-history-open title="Recent (Ctrl+Shift+H)">Recent</button>
-<a href="{{ changes_url }}" class="nav-button" data-editor-link="changes" data-editor-form="edit-form" title="Changes (Ctrl+Shift+L)">Changes</a>
-<a href="/{{ paste.slug }}" class="nav-button" data-editor-link="open" data-editor-form="edit-form" title="Open (Ctrl+Shift+O)">Open</a>
-<button type="submit" form="edit-form" class="button primary nav-button" title="Save (Ctrl+S)">Save</button>
+<button type="button" class="nav-button" data-history-open title="{{ t('site.recent') }} (Ctrl+Shift+H)">{{ t("site.recent") }}</button>
+<a href="{{ changes_url }}" class="nav-button" data-editor-link="changes" data-editor-form="edit-form" title="{{ t('common.changes') }} (Ctrl+Shift+L)">{{ t("common.changes") }}</a>
+<a href="/{{ paste.slug }}" class="nav-button" data-editor-link="open" data-editor-form="edit-form" title="{{ t('common.open') }} (Ctrl+Shift+O)">{{ t("common.open") }}</a>
+<button type="submit" form="edit-form" class="button primary nav-button" title="{{ t('common.save') }} (Ctrl+S)">{{ t("common.save") }}</button>
 {% endblock %}
 
 {% block content %}
 <section class="surface surface-editor surface-editor-fullscreen">
     {% if collaboration_joined %}
-    <div class="message success">Added to your Shared tab. This document will now stay in your profile.</div>
+    <div class="message success">{{ t("edit.shared_notice") }}</div>
     {% endif %}
     {% if error %}
     <div class="message error">{{ error }}</div>

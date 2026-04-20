@@ -2,13 +2,13 @@
 
 {% block content %}
 <section class="surface surface-narrow auth-shell">
-    <p class="eyebrow">{{ "Register" if auth_mode == "register" else "Login" }}</p>
-    <h1>{{ title }}</h1>
+    <p class="eyebrow">{{ t("auth.register_eyebrow") if auth_mode == "register" else t("auth.login_eyebrow") }}</p>
+    <h1>{{ t("auth.register_title") if auth_mode == "register" else t("auth.login_title") }}</h1>
     <p class="mini-note">
         {% if auth_mode == "register" %}
-        Create an account to keep your files in a personal profile.
+        {{ t("auth.register_copy") }}
         {% else %}
-        Sign in to see and manage your saved files.
+        {{ t("auth.login_copy") }}
         {% endif %}
     </p>
 
@@ -20,30 +20,30 @@
         <input type="hidden" name="next_path" value="{{ next_path }}">
 
         <label class="auth-field">
-            <span>Username</span>
-            <input type="text" name="username" maxlength="32" value="{{ form_values.username }}" placeholder="your_name" autocomplete="username" required>
+            <span>{{ t("auth.username") }}</span>
+            <input type="text" name="username" maxlength="32" value="{{ form_values.username }}" placeholder="{{ t('auth.username_placeholder') }}" autocomplete="username" required>
         </label>
 
         <label class="auth-field">
-            <span>Password</span>
-            <input type="password" name="password" minlength="8" placeholder="At least 8 characters" autocomplete="{% if auth_mode == 'register' %}new-password{% else %}current-password{% endif %}" required>
+            <span>{{ t("auth.password") }}</span>
+            <input type="password" name="password" minlength="8" placeholder="{{ t('auth.password_placeholder') }}" autocomplete="{% if auth_mode == 'register' %}new-password{% else %}current-password{% endif %}" required>
         </label>
 
         {% if auth_mode == "register" %}
         <label class="auth-field">
-            <span>Confirm Password</span>
-            <input type="password" name="confirm_password" minlength="8" placeholder="Repeat your password" autocomplete="new-password" required>
+            <span>{{ t("auth.confirm_password") }}</span>
+            <input type="password" name="confirm_password" minlength="8" placeholder="{{ t('auth.confirm_password_placeholder') }}" autocomplete="new-password" required>
         </label>
         {% endif %}
 
         <div class="form-actions">
             <button type="submit" class="button primary">
-                {% if auth_mode == "register" %}Create account{% else %}Sign in{% endif %}
+                {% if auth_mode == "register" %}{{ t("auth.create_account") }}{% else %}{{ t("auth.sign_in") }}{% endif %}
             </button>
             {% if auth_mode == "register" %}
-            <a class="button secondary" href="/login{% if next_path %}?next={{ next_path }}{% endif %}">Already have an account?</a>
+            <a class="button secondary" href="/login{% if next_path %}?next={{ next_path }}{% endif %}">{{ t("auth.already_have_account") }}</a>
             {% else %}
-            <a class="button secondary" href="/register{% if next_path %}?next={{ next_path }}{% endif %}">Create account</a>
+            <a class="button secondary" href="/register{% if next_path %}?next={{ next_path }}{% endif %}">{{ t("auth.create_account_link") }}</a>
             {% endif %}
         </div>
     </form>

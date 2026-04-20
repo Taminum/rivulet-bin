@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_language }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,11 +7,13 @@
     <meta name="description" content="{{ tagline }}">
     <script>
         (function () {
-            const stored = localStorage.getItem("colorTheme") || "dark";
+            const serverDefault = {{ default_theme_preference | tojson }};
+            const stored = localStorage.getItem("colorTheme") || serverDefault || "dark";
             const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
             const resolved = stored === "auto" ? (prefersDark ? "dark" : "light") : stored;
             document.documentElement.dataset.theme = resolved;
             document.documentElement.dataset.themePreference = stored;
+            window.RIVULET_UI = {{ client_texts | tojson }};
         })();
     </script>
     <link rel="stylesheet" href="{{ request.url_for('static', path='/vendor/codemirror/codemirror.min.css') }}?v={{ asset_version }}">
@@ -36,16 +38,17 @@
 
             <div class="topbar-right">
                 {% block topbar_actions %}
-                <a href="/about">About</a>
+                <a href="/about">{{ t("site.about") }}</a>
                 {% endblock %}
                 {% if current_user %}
                 <a class="topbar-account-link" href="/account">@{{ current_user.username }}</a>
-                <a href="/logout">Log out</a>
+                <a href="/account?tab=settings" {% if request.url.path == '/account' and request.query_params.get('tab') == 'settings' %}class="is-active"{% endif %}>{{ t("account.section_settings") }}</a>
+                <a href="/logout">{{ t("site.logout") }}</a>
                 {% else %}
-                <a href="/login">Login</a>
-                <a href="/register">Register</a>
+                <a href="/login">{{ t("site.login") }}</a>
+                <a href="/register">{{ t("site.register") }}</a>
                 {% endif %}
-                <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">Auto</button>
+                <button type="button" class="theme-toggle" data-theme-toggle aria-label="{{ t('common.theme') }}">{{ t("theme.auto") }}</button>
             </div>
         </div>
     </header>

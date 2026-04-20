@@ -39,11 +39,25 @@ def get_session():
 
 def _ensure_runtime_schema() -> None:
     inspector = inspect(engine)
+    user_columns = {column["name"] for column in inspector.get_columns("users")} if inspector.has_table("users") else set()
     if not inspector.has_table("pastes"):
+        with engine.begin() as connection:
+            if "preferred_language" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN preferred_language TEXT DEFAULT 'en'"))
+            if "theme_preference" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN theme_preference TEXT DEFAULT 'dark'"))
+            connection.execute(text("UPDATE users SET preferred_language = 'en' WHERE preferred_language IS NULL"))
+            connection.execute(text("UPDATE users SET theme_preference = 'dark' WHERE theme_preference IS NULL"))
         return
 
     paste_columns = {column["name"] for column in inspector.get_columns("pastes")}
     with engine.begin() as connection:
+        if "preferred_language" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN preferred_language TEXT DEFAULT 'en'"))
+        if "theme_preference" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN theme_preference TEXT DEFAULT 'dark'"))
+        connection.execute(text("UPDATE users SET preferred_language = 'en' WHERE preferred_language IS NULL"))
+        connection.execute(text("UPDATE users SET theme_preference = 'dark' WHERE theme_preference IS NULL"))
         if "tags_json" not in paste_columns:
             connection.execute(text("ALTER TABLE pastes ADD COLUMN tags_json TEXT DEFAULT '[]'"))
         if "owner_id" not in paste_columns:

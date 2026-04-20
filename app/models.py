@@ -14,6 +14,8 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    preferred_language: Mapped[str] = mapped_column(String(5), default="en")
+    theme_preference: Mapped[str] = mapped_column(String(16), default="dark")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -38,6 +40,14 @@ class User(Base):
     revision_authorships: Mapped[list["PasteRevision"]] = relationship(
         back_populates="editor",
         foreign_keys="PasteRevision.editor_id",
+    )
+    bookmarks: Mapped[list["Bookmark"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    notes: Mapped[list["Note"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
 
 
@@ -129,3 +139,46 @@ class PasteRevision(Base):
 
     paste: Mapped[Paste] = relationship(back_populates="revisions")
     editor: Mapped[User | None] = relationship(back_populates="revision_authorships")
+
+
+class Bookmark(Base):
+    __tablename__ = "bookmarks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    url: Mapped[str] = mapped_column(String(2048))
+    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    tags_json: Mapped[str] = mapped_column(Text(), default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="bookmarks")
+
+
+class Note(Base):
+    __tablename__ = "notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    content: Mapped[str] = mapped_column(Text())
+    tags_json: Mapped[str] = mapped_column(Text(), default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    user: Mapped[User] = relationship(back_populates="notes")

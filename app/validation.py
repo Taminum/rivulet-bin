@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
+from urllib.parse import urlparse
 
 import sqlglot
 import yaml
@@ -61,6 +62,9 @@ def detect_syntax(content: str) -> str:
     stripped = content.strip()
     if not stripped:
         return "auto"
+
+    if _looks_like_url_text(stripped):
+        return "text"
 
     if _looks_like_json(stripped):
         return "json"
@@ -193,10 +197,19 @@ def _looks_like_json(content: str) -> bool:
     return bool(content) and content[0] in "{["
 
 
+def _looks_like_url_text(content: str) -> bool:
+    if any(symbol.isspace() for symbol in content):
+        return False
+    parsed = urlparse(content)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
 def _looks_like_yaml(content: str) -> bool:
     if content.startswith("---"):
         return True
     if content.startswith("{") or content.startswith("["):
+        return False
+    if _looks_like_url_text(content):
         return False
     return bool(YAML_RE.search(content))
 

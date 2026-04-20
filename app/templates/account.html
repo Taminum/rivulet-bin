@@ -3,42 +3,38 @@
 {% block content %}
 <section class="page-titlebar">
     <div>
-        <p class="eyebrow">Profile</p>
+        <p class="eyebrow">{{ t("site.profile") }}</p>
         <h1>@{{ current_user.username }}</h1>
         <p class="meta-line">
-            <span>{{ owned_count }} saved</span>
-            <span>{{ shared_count }} shared</span>
-            <span>Account created {{ current_user.created_at.strftime('%Y-%m-%d %H:%M') if current_user.created_at else 'just now' }}</span>
+            <span>{{ owned_count }} {{ t("account.meta_saved") }}</span>
+            <span>{{ shared_count }} {{ t("account.meta_shared") }}</span>
+            <span>{{ bookmark_count }} {{ t("account.meta_bookmarks") }}</span>
+            <span>{{ note_count }} {{ t("account.meta_notes") }}</span>
+            <span>{{ short_link_count }} {{ t("account.meta_short_links") }}</span>
+            <span>{{ t("account.meta_created", value=(current_user.created_at.strftime('%Y-%m-%d %H:%M') if current_user.created_at else t('common.just_now'))) }}</span>
         </p>
     </div>
     <div class="view-actions account-toolbar">
-        <div class="account-sections" role="tablist" aria-label="Profile sections">
-            <a
-                class="nav-button account-section-link {% if account_tab == 'saved' %}is-active{% endif %}"
-                href="{{ saved_tab_url }}"
-                aria-current="{% if account_tab == 'saved' %}page{% else %}false{% endif %}"
-            >
-                Saved
-                <span>{{ owned_count }}</span>
-            </a>
-            <a
-                class="nav-button account-section-link {% if account_tab == 'shared' %}is-active{% endif %}"
-                href="{{ shared_tab_url }}"
-                aria-current="{% if account_tab == 'shared' %}page{% else %}false{% endif %}"
-            >
-                Shared
-                <span>{{ shared_count }}</span>
-            </a>
+        <div class="account-sections" role="tablist" aria-label="{{ t('site.profile') }}">
+            <a class="nav-button account-section-link {% if account_tab == 'saved' %}is-active{% endif %}" href="{{ saved_tab_url }}" aria-current="{% if account_tab == 'saved' %}page{% else %}false{% endif %}">{{ t("account.section_saved") }}<span>{{ owned_count }}</span></a>
+            <a class="nav-button account-section-link {% if account_tab == 'shared' %}is-active{% endif %}" href="{{ shared_tab_url }}" aria-current="{% if account_tab == 'shared' %}page{% else %}false{% endif %}">{{ t("account.section_shared") }}<span>{{ shared_count }}</span></a>
+            <a class="nav-button account-section-link {% if account_tab == 'bookmarks' %}is-active{% endif %}" href="{{ bookmarks_tab_url }}" aria-current="{% if account_tab == 'bookmarks' %}page{% else %}false{% endif %}">{{ t("account.section_bookmarks") }}<span>{{ bookmark_count }}</span></a>
+            <a class="nav-button account-section-link {% if account_tab == 'notes' %}is-active{% endif %}" href="{{ notes_tab_url }}" aria-current="{% if account_tab == 'notes' %}page{% else %}false{% endif %}">{{ t("account.section_notes") }}<span>{{ note_count }}</span></a>
+            <a class="nav-button account-section-link {% if account_tab == 'links' %}is-active{% endif %}" href="{{ links_tab_url }}" aria-current="{% if account_tab == 'links' %}page{% else %}false{% endif %}">{{ t("account.section_links") }}<span>{{ short_link_count }}</span></a>
         </div>
+        {% if show_account_view_toggle %}
         <div class="account-view-toggle" role="group" aria-label="Profile layout">
-            <button class="nav-button account-view-button" type="button" data-account-view-toggle data-view="cards" data-active="true" aria-pressed="true">
-                Cards
-            </button>
-            <button class="nav-button account-view-button" type="button" data-account-view-toggle data-view="list" data-active="false" aria-pressed="false">
-                List
-            </button>
+            <button class="nav-button account-view-button" type="button" data-account-view-toggle data-view="cards" data-active="true" aria-pressed="true">{{ t("account.cards") }}</button>
+            <button class="nav-button account-view-button" type="button" data-account-view-toggle data-view="list" data-active="false" aria-pressed="false">{{ t("account.list") }}</button>
         </div>
-        <a class="button primary" href="/">New paste</a>
+        {% endif %}
+        {% if show_create_item_button %}
+        {% if account_tab == 'bookmarks' %}
+        <button class="button primary" type="button" data-bookmark-open-new data-bookmark-heading="{{ t('account.new_bookmark') }}">{{ t("account.new_bookmark") }}</button>
+        {% else %}
+        <a class="button primary" href="{{ create_item_url }}">{{ create_item_label }}</a>
+        {% endif %}
+        {% endif %}
     </div>
 </section>
 
@@ -46,147 +42,482 @@
 <p class="message success">{{ account_message }}</p>
 {% endif %}
 
-{% if active_tag %}
-<section class="surface surface-narrow account-filter-shell">
-    <div class="account-filter-bar">
-        <div class="account-filter-copy">
-            <p class="eyebrow">Tag filter</p>
-            <strong>#{{ active_tag }}</strong>
-            <p class="mini-note">{{ profile_count }} matching documents in {{ account_tab }}.</p>
+{% if account_tab == 'settings' %}
+<section class="account-settings-grid">
+    <article class="surface account-settings-card account-settings-card-preferences">
+        <p class="eyebrow">{{ t("settings.preferences_eyebrow") }}</p>
+        <h2>{{ t("settings.preferences_title") }}</h2>
+        <p class="mini-note">{{ t("settings.preferences_copy") }}</p>
+        {% if settings_error %}<p class="message error">{{ settings_error }}</p>{% endif %}
+
+        <form method="post" action="/account/settings/preferences" class="auth-form account-settings-form" data-preferences-form>
+            <div class="account-settings-fields">
+                <label class="auth-field">
+                    <span>{{ t("common.language") }}</span>
+                    <select name="preferred_language">
+                        {% for value, label in language_options %}
+                        <option value="{{ value }}" {% if settings_form_values.preferred_language == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="auth-field">
+                    <span>{{ t("common.theme") }}</span>
+                    <select name="theme_preference">
+                        {% for value, label in theme_options %}
+                        <option value="{{ value }}" {% if settings_form_values.theme_preference == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="form-actions account-settings-submit">
+                <button type="submit" class="button primary">{{ t("settings.save_preferences") }}</button>
+            </div>
+        </form>
+    </article>
+
+    <article class="surface account-settings-card">
+        <p class="eyebrow">{{ t("settings.export_eyebrow") }}</p>
+        <h2>{{ t("settings.export_title") }}</h2>
+        <p class="mini-note">{{ t("settings.export_copy") }}</p>
+        <div class="account-settings-actions">
+            <a class="button secondary" href="/account/export?section=all">{{ t("settings.export_all") }}</a>
+            <a class="button secondary" href="/account/export?section=saved">{{ t("settings.export_saved") }}</a>
+            <a class="button secondary" href="/account/export?section=shared">{{ t("settings.export_shared") }}</a>
+            <a class="button secondary" href="/account/export?section=bookmarks">{{ t("settings.export_bookmarks") }}</a>
+            <a class="button secondary" href="/account/export?section=notes">{{ t("settings.export_notes") }}</a>
+            <a class="button secondary" href="/account/export?section=links">{{ t("settings.export_links") }}</a>
         </div>
-        <a class="button secondary" href="{{ clear_tag_url }}">Clear filter</a>
+    </article>
+
+    <article class="surface account-settings-card">
+        <p class="eyebrow">{{ t("settings.import_eyebrow") }}</p>
+        <h2>{{ t("settings.import_title") }}</h2>
+        <p class="mini-note">{{ t("settings.import_copy") }}</p>
+        {% if import_error %}<p class="message error">{{ import_error }}</p>{% endif %}
+
+        <form method="post" action="/account/import" enctype="multipart/form-data" class="auth-form account-settings-form">
+            <label class="auth-field">
+                <span>{{ t("settings.import_scope") }}</span>
+                <select name="section">
+                    <option value="all" {% if import_form_values.section == 'all' %}selected{% endif %}>{{ t("settings.import_scope_all") }}</option>
+                    <option value="saved" {% if import_form_values.section == 'saved' %}selected{% endif %}>{{ t("settings.import_scope_saved") }}</option>
+                    <option value="shared" {% if import_form_values.section == 'shared' %}selected{% endif %}>{{ t("settings.import_scope_shared") }}</option>
+                    <option value="bookmarks" {% if import_form_values.section == 'bookmarks' %}selected{% endif %}>{{ t("settings.import_scope_bookmarks") }}</option>
+                    <option value="notes" {% if import_form_values.section == 'notes' %}selected{% endif %}>{{ t("settings.import_scope_notes") }}</option>
+                    <option value="links" {% if import_form_values.section == 'links' %}selected{% endif %}>{{ t("settings.import_scope_links") }}</option>
+                </select>
+            </label>
+            <label class="auth-field">
+                <span>{{ t("settings.import_file") }}</span>
+                <input type="file" name="archive" accept="application/json,.json" required>
+            </label>
+            <p class="mini-note">{{ t("settings.import_hint") }}</p>
+            <div class="form-actions account-settings-submit">
+                <button type="submit" class="button primary">{{ t("settings.import_button") }}</button>
+            </div>
+        </form>
+    </article>
+</section>
+{% else %}
+<section class="account-layout" data-account-layout data-account-sidebar-collapsed="false">
+    <aside class="surface account-sidebar" data-account-sidebar>
+        <div class="account-sidebar-header">
+            <div>
+                <p class="eyebrow">{{ t("account.workspace") }}</p>
+                <strong>{{ active_section_label }}</strong>
+            </div>
+            <button class="history-close" type="button" data-account-sidebar-toggle>{{ t("account.hide") }}</button>
+        </div>
+
+        <form method="get" class="account-sidebar-search">
+            <input type="hidden" name="tab" value="{{ account_tab }}">
+            {% if active_tag %}<input type="hidden" name="tag" value="{{ active_tag }}">{% endif %}
+            {% if active_created %}<input type="hidden" name="created" value="{{ active_created }}">{% endif %}
+            {% if active_month %}<input type="hidden" name="month" value="{{ active_month }}">{% endif %}
+            <div class="account-sidebar-search-row">
+                <input type="search" name="q" value="{{ active_search }}" placeholder="{{ search_placeholder }}">
+                <button type="submit" class="nav-button">{{ t("common.search") }}</button>
+            </div>
+            {% if active_search %}
+            <a class="mini-note account-sidebar-clear" href="{{ clear_search_url }}">{{ t("common.clear") }}</a>
+            {% endif %}
+        </form>
+
+        <section class="account-sidebar-section">
+            <div class="account-sidebar-section-header">
+                <strong>{{ calendar_context.label }}</strong>
+                <div class="account-calendar-nav">
+                    <a class="nav-button account-calendar-nav-button" href="{{ calendar_context.previous_url }}" aria-label="Previous month">&lsaquo;</a>
+                    <a class="nav-button account-calendar-nav-button" href="{{ calendar_context.next_url }}" aria-label="Next month">&rsaquo;</a>
+                </div>
+            </div>
+            <div class="account-calendar-weekdays">
+                {% for weekday in calendar_context.weekdays %}
+                <span>{{ weekday }}</span>
+                {% endfor %}
+            </div>
+            <div class="account-calendar-grid">
+                {% for week in calendar_context.weeks %}
+                    {% for day in week %}
+                    <a class="account-calendar-day {% if not day.is_current_month %}is-outside{% endif %} {% if day.has_items %}has-items{% endif %} {% if day.is_selected %}is-selected{% endif %}" href="{{ day.url }}" aria-current="{% if day.is_selected %}date{% else %}false{% endif %}">
+                        <span>{{ day.label }}</span>
+                    </a>
+                    {% endfor %}
+                {% endfor %}
+            </div>
+            {% if active_created %}
+            <a class="mini-note account-sidebar-clear" href="{{ clear_date_url }}">Clear selected date</a>
+            {% endif %}
+        </section>
+
+        <section class="account-sidebar-section">
+            <div class="account-sidebar-section-header">
+                <strong>{{ t("common.tags") }}</strong>
+                {% if active_tag %}
+                <a class="mini-note account-sidebar-clear" href="{{ clear_tag_url }}">{{ t("common.clear") }}</a>
+                {% endif %}
+            </div>
+            <div class="account-sidebar-tags">
+                {% for item in sidebar_tag_items %}
+                <a class="account-sidebar-tag {% if item.is_active %}is-active{% endif %}" href="{{ item.url }}"><span>#{{ item.tag }}</span><span>({{ item.count }})</span></a>
+                {% else %}
+                <p class="mini-note">{{ t("account.tags_empty") }}</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        {% if has_active_filters %}
+        <section class="account-sidebar-section account-sidebar-active-filters">
+            <div class="account-sidebar-section-header">
+                <strong>{{ t("account.active_filters") }}</strong>
+                <a class="mini-note account-sidebar-clear" href="{{ clear_all_filters_url }}">{{ t("common.clear_all") }}</a>
+            </div>
+            <div class="account-filter-copy">
+                <div class="account-filter-chips">
+                    {% if active_search %}<span class="account-filter-chip">{{ t("account.filter_search", value=active_search) }}</span>{% endif %}
+                    {% if active_tag %}<span class="account-filter-chip">#{{ active_tag }}</span>{% endif %}
+                    {% if active_created %}<span class="account-filter-chip">{{ active_created }}</span>{% endif %}
+                </div>
+                <p class="mini-note">{{ t("common.matching_items", count=profile_count, section=active_section_label) }}</p>
+            </div>
+        </section>
+        {% endif %}
+    </aside>
+
+    <button class="nav-button account-sidebar-show" type="button" data-account-sidebar-show>{{ t("site.filters") }}</button>
+
+    <div class="account-main-column">
+        {% if account_tab in ['saved', 'links', 'shared'] %}
+        <section class="account-shell" data-account-view="cards" data-account-view-default="{{ 'list' if account_tab == 'links' else 'cards' }}" data-account-view-storage-key="accountView:{{ account_tab }}">
+            {% if profile_items %}
+            {% if account_tab == 'links' %}
+            <div class="account-list account-list-compact-links">
+                {% for item in profile_items %}
+                <article class="account-card account-card-link-compact" data-preview-kind="{{ item.preview_kind }}">
+                    <div class="account-card-body">
+                        <div class="account-link-compact-main">
+                            <strong>{{ item.paste.title or item.paste.slug }}</strong>
+                            <a class="account-link-compact-target" href="{{ item.preview_text }}" target="_blank" rel="noreferrer">{{ item.preview_text }}</a>
+                            <span class="account-link-compact-slug">/{{ item.paste.slug }}</span>
+                        </div>
+                        <div class="account-actions account-actions-link-compact">
+                            <button class="button secondary" type="button" data-share-open data-share-title="{{ item.paste.title or item.paste.slug }}" data-share-slug="{{ item.paste.slug }}" data-share-public-url="{{ item.public_url }}" data-share-raw-url="{{ item.raw_url }}" data-share-edit-url="{{ item.share_edit_url }}" data-share-has-raw="false">{{ t("common.share") }}</button>
+                            {% if item.can_delete %}
+                            <form method="post" action="/account/delete/{{ item.paste.slug }}" data-delete-form data-delete-label="{{ item.paste.title or item.paste.slug }}">
+                                <input type="hidden" name="tab" value="{{ account_tab }}">
+                                <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
+                                <input type="hidden" name="filter_search" value="{{ active_search }}">
+                                <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
+                                <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
+                                <button class="button danger" type="submit">{{ t("common.delete") }}</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="account-list">
+                {% for item in profile_items %}
+                <article class="account-card" data-preview-kind="{{ item.preview_kind }}">
+                    <a class="account-preview" href="/{{ item.paste.slug }}">
+                        <div class="account-preview-topline">
+                            <span class="account-preview-pill">{{ item.preview_label }}</span>
+                            {% if item.is_shared %}<span class="account-preview-state">Shared</span>{% endif %}
+                        </div>
+                        <div class="account-preview-body account-preview-body-{{ item.preview_kind }}">
+                            {% if item.preview_kind == "link" %}
+                            <span class="account-preview-link-label">{{ t("account.shortened_link") }}</span>
+                            <strong class="account-preview-link">{{ item.preview_text }}</strong>
+                            {% else %}
+                            <pre class="account-preview-code">{{ item.preview_text }}</pre>
+                            {% endif %}
+                        </div>
+                    </a>
+                    <div class="account-card-body">
+                        <div class="account-main">
+                            <strong>{{ item.paste.title or item.paste.slug }}</strong>
+                            <span>{{ item.paste.slug }}</span>
+                        </div>
+                        <div class="account-meta">
+                            <span>{{ item.display_syntax }}</span>
+                            <span>{{ item.paste.view_mode|capitalize }}</span>
+                            {% if item.is_shared %}<span>Shared</span>{% endif %}
+                            <span>{{ item.paste.updated_at.strftime('%Y-%m-%d %H:%M') if item.paste.updated_at else t("common.just_now") }}</span>
+                        </div>
+                        {% if item.tags %}
+                        <div class="tag-list tag-list-compact">
+                            {% for tag in item.tags %}
+                            <a class="tag-pill tag-pill-link {% if active_tag == tag %}is-active{% endif %}" href="/account?tab={{ account_tab }}&tag={{ tag }}">#{{ tag }}</a>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="account-people">
+                            <span>{{ t("common.created_by", user=item.creator_label) }}</span>
+                            <span>{{ t("common.last_edited_by", user=item.last_editor_label) }}</span>
+                        </div>
+                        <div class="account-actions">
+                            <a class="button secondary" href="/{{ item.paste.slug }}">{{ t("common.open") }}</a>
+                            <a class="button secondary" href="{{ item.edit_url }}">{{ t("common.edit") }}</a>
+                            <a class="button secondary" href="/raw/{{ item.paste.slug }}">{{ t("common.raw") }}</a>
+                            <button class="button secondary" type="button" data-share-open data-share-title="{{ item.paste.title or item.paste.slug }}" data-share-slug="{{ item.paste.slug }}" data-share-public-url="{{ item.public_url }}" data-share-raw-url="{{ item.raw_url }}" data-share-edit-url="{{ item.share_edit_url }}" data-share-has-raw="{{ 'true' if not item.paste.is_url else 'false' }}">{{ t("common.share") }}</button>
+                            {% if item.can_manage_tags %}
+                            <button class="button secondary" type="button" data-tags-open data-tags-action="/account/tags/{{ item.paste.slug }}" data-tags-slug="{{ item.paste.slug }}" data-tags-title="{{ item.paste.title or item.paste.slug }}" data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}" data-tags-tab="{{ account_tab }}" data-tags-filter="{{ active_tag or '' }}">{{ t("common.tags") }}</button>
+                            {% endif %}
+                            <a class="button secondary" href="{{ item.changes_url }}">{{ t("common.changes") }}</a>
+                            {% if item.can_delete %}
+                            <form method="post" action="/account/delete/{{ item.paste.slug }}" data-delete-form data-delete-label="{{ item.paste.title or item.paste.slug }}">
+                                <input type="hidden" name="tab" value="{{ account_tab }}">
+                                <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
+                                <input type="hidden" name="filter_search" value="{{ active_search }}">
+                                <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
+                                <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
+                                <button class="button danger" type="submit">{{ t("common.delete") }}</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% else %}
+            <p class="history-empty">{% if has_active_filters %}{{ t("account.no_matching_documents") }}{% elif account_tab == 'shared' %}{{ t("account.no_shared_documents") }}{% elif account_tab == 'links' %}{{ t("account.no_links_documents") }}{% else %}{{ t("account.no_saved_documents") }}{% endif %}</p>
+            {% endif %}
+        </section>
+
+        {% elif account_tab == 'bookmarks' %}
+        <section class="account-shell" data-account-view="cards" data-account-view-default="cards" data-account-view-storage-key="accountView:bookmarks">
+            {% if bookmark_items %}
+            <div class="account-list">
+                {% for item in bookmark_items %}
+                <article class="account-card" data-preview-kind="link">
+                    <a class="account-preview" href="{{ item.bookmark.url }}" target="_blank" rel="noreferrer">
+                        <div class="account-preview-topline">
+                            <span class="account-preview-pill">{{ t("account.bookmark") }}</span>
+                        </div>
+                        <div class="account-preview-body account-preview-body-link">
+                            <span class="account-preview-link-label">{{ item.host }}</span>
+                            <strong class="account-preview-link">{{ item.preview_text }}</strong>
+                        </div>
+                    </a>
+                    <div class="account-card-body">
+                        <div class="account-main">
+                            <strong>{{ item.display_title }}</strong>
+                            <span>{{ item.display_url }}</span>
+                        </div>
+                        <div class="account-meta">
+                            <span>{{ t("common.private") }}</span>
+                            <span>{{ item.bookmark.updated_at.strftime('%Y-%m-%d %H:%M') if item.bookmark.updated_at else t("common.just_now") }}</span>
+                        </div>
+                        {% if item.tags %}
+                        <div class="tag-list tag-list-compact">
+                            {% for tag in item.tags %}
+                            <a class="tag-pill tag-pill-link {% if active_tag == tag %}is-active{% endif %}" href="/account?tab=bookmarks&tag={{ tag }}">#{{ tag }}</a>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="account-actions">
+                            <a class="button secondary" href="{{ item.bookmark.url }}" target="_blank" rel="noreferrer">{{ t("common.open") }}</a>
+                            <button class="button secondary" type="button" data-bookmark-open data-bookmark-mode="edit" data-bookmark-action="/account/bookmarks/{{ item.bookmark.id }}" data-bookmark-heading="{{ t('common.edit') }}" data-bookmark-caption="{{ item.display_url }}" data-bookmark-value-title="{{ item.bookmark.title or '' }}" data-bookmark-value-url="{{ item.bookmark.url }}" data-bookmark-value-description="{{ item.bookmark.description or '' }}" data-bookmark-value-tags="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}">{{ t("common.edit") }}</button>
+                            <button class="button secondary" type="button" data-tags-open data-tags-action="/account/bookmarks/{{ item.bookmark.id }}/tags" data-tags-slug="bookmark-{{ item.bookmark.id }}" data-tags-title="{{ item.display_title }}" data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}" data-tags-tab="bookmarks" data-tags-filter="{{ active_tag or '' }}">{{ t("common.tags") }}</button>
+                            <form method="post" action="/account/bookmarks/{{ item.bookmark.id }}/delete" data-delete-form data-delete-label="{{ item.display_title }}">
+                                <input type="hidden" name="tab" value="bookmarks">
+                                <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
+                                <input type="hidden" name="filter_search" value="{{ active_search }}">
+                                <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
+                                <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
+                                <button class="button danger" type="submit">{{ t("common.delete") }}</button>
+                            </form>
+                        </div>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="history-empty">{% if has_active_filters %}{{ t("account.no_matching_documents") }}{% else %}{{ t("account.no_bookmarks") }}{% endif %}</p>
+            {% endif %}
+        </section>
+
+        {% else %}
+        <section class="account-shell" data-account-view="cards" data-account-view-default="cards" data-account-view-storage-key="accountView:notes">
+            <div class="account-list">
+                <article class="account-card account-card-note-composer" data-preview-kind="text">
+                    <form method="post" action="{{ note_form_action }}" class="account-note-card-form">
+                        <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
+                        <input type="hidden" name="filter_search" value="{{ active_search }}">
+                        <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
+                        <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
+                        <input type="hidden" name="title" value="{{ note_form_values.title }}">
+                        <div class="account-preview account-note-compose-surface">
+                            <div class="account-preview-topline">
+                                <span class="account-preview-pill">{% if note_form_mode == 'edit' %}{{ t("account.edit_note") }}{% else %}{{ t("account.new_note") }}{% endif %}</span>
+                                {% if note_form_mode == 'edit' %}<span class="account-preview-state">{{ t("account.editing") }}</span>{% endif %}
+                            </div>
+                            <div class="account-preview-body account-preview-body-text account-preview-body-compose">
+                                <textarea class="account-note-card-input" name="content" rows="10" placeholder="{{ t('account.note_placeholder') }}" required>{{ note_form_values.content }}</textarea>
+                            </div>
+                        </div>
+                        <div class="account-card-body">
+                            {% if note_error %}<p class="message error">{{ note_error }}</p>{% endif %}
+                            <div class="account-meta">
+                                <span>{{ t("common.private") }}</span>
+                                <span>{{ t("account.note_updating") if note_form_mode == 'edit' else t("account.note_saved_directly") }}</span>
+                            </div>
+                            <div class="account-note-card-actions">
+                                <input type="text" name="tags" maxlength="240" placeholder="#ideas #todo #draft" value="{{ note_form_values.tags }}">
+                                <button type="submit" class="button primary">{{ t("common.save") }}</button>
+                                {% if note_form_mode == 'edit' %}<a class="button secondary" href="{{ note_cancel_url }}">{{ t("common.cancel") }}</a>{% endif %}
+                            </div>
+                        </div>
+                    </form>
+                </article>
+                {% for item in note_items %}
+                <article class="account-card" data-preview-kind="text">
+                    <div class="account-preview account-preview-static">
+                        <div class="account-preview-topline">
+                            <span class="account-preview-pill">{{ t("account.note") }}</span>
+                        </div>
+                        <div class="account-preview-body account-preview-body-text">
+                            <div class="account-note-rich">{{ item.preview_html }}</div>
+                        </div>
+                    </div>
+                    <div class="account-card-body">
+                        <div class="account-note-card-header">
+                            <div class="account-main">
+                                <strong>{{ item.display_title }}</strong>
+                                <span>{{ item.line_count }} lines, {{ item.char_count }} chars</span>
+                            </div>
+                            <button class="nav-button account-note-preview-trigger" type="button" data-note-preview-open data-note-preview-title="{{ item.display_title }}" data-note-preview-meta="{{ item.line_count }} lines, {{ item.char_count }} chars" data-note-preview-updated="{{ item.note.updated_at.strftime('%Y-%m-%d %H:%M') if item.note.updated_at else t('common.just_now') }}">{{ t("common.preview") }}</button>
+                        </div>
+                        <div class="account-meta">
+                            <span>{{ t("common.private") }}</span>
+                            <span>{{ item.note.updated_at.strftime('%Y-%m-%d %H:%M') if item.note.updated_at else t("common.just_now") }}</span>
+                        </div>
+                        {% if item.tags %}
+                        <div class="tag-list tag-list-compact">
+                            {% for tag in item.tags %}
+                            <a class="tag-pill tag-pill-link {% if active_tag == tag %}is-active{% endif %}" href="/account?tab=notes&tag={{ tag }}">#{{ tag }}</a>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="account-actions">
+                            <a class="button secondary" href="{{ item.edit_url }}">{{ t("common.open") }}</a>
+                            <button class="button secondary" type="button" data-tags-open data-tags-action="/account/notes/{{ item.note.id }}/tags" data-tags-slug="note-{{ item.note.id }}" data-tags-title="{{ item.display_title }}" data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}" data-tags-tab="notes" data-tags-filter="{{ active_tag or '' }}">{{ t("common.tags") }}</button>
+                            <form method="post" action="/account/notes/{{ item.note.id }}/delete" data-delete-form data-delete-label="{{ item.display_title }}">
+                                <input type="hidden" name="tab" value="notes">
+                                <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
+                                <input type="hidden" name="filter_search" value="{{ active_search }}">
+                                <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
+                                <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
+                                <button class="button danger" type="submit">{{ t("common.delete") }}</button>
+                            </form>
+                        </div>
+                        <div class="account-note-preview-payload" hidden data-note-preview-payload>{{ item.content_html }}</div>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+
+            {% if not note_items and not note_error and note_form_mode != 'edit' %}
+            <p class="history-empty">{% if has_active_filters %}{{ t("account.no_matching_documents") }}{% else %}{{ t("account.no_notes") }}{% endif %}</p>
+            {% endif %}
+        </section>
+        {% endif %}
     </div>
 </section>
 {% endif %}
 
-<section class="account-shell" data-account-view="cards" data-account-view-default="cards">
-    {% if profile_items %}
-    <div class="account-list">
-        {% for item in profile_items %}
-        <article class="account-card" data-preview-kind="{{ item.preview_kind }}">
-            <a class="account-preview" href="/{{ item.paste.slug }}">
-                <div class="account-preview-topline">
-                    <span class="account-preview-pill">{{ item.preview_label }}</span>
-                    {% if item.is_shared %}
-                    <span class="account-preview-state">Shared</span>
-                    {% endif %}
-                </div>
-                <div class="account-preview-body account-preview-body-{{ item.preview_kind }}">
-                    {% if item.preview_kind == "link" %}
-                    <span class="account-preview-link-label">Shortened link</span>
-                    <strong class="account-preview-link">{{ item.preview_text }}</strong>
-                    {% else %}
-                    <pre class="account-preview-code">{{ item.preview_text }}</pre>
-                    {% endif %}
-                </div>
-            </a>
-            <div class="account-card-body">
-                <div class="account-main">
-                    <strong>{{ item.paste.title or item.paste.slug }}</strong>
-                    <span>{{ item.paste.slug }}</span>
-                </div>
-                <div class="account-meta">
-                    <span>{{ item.display_syntax }}</span>
-                    <span>{{ item.paste.view_mode|capitalize }}</span>
-                    {% if item.is_shared %}
-                    <span>Shared</span>
-                    {% endif %}
-                    <span>{{ item.paste.updated_at.strftime('%Y-%m-%d %H:%M') if item.paste.updated_at else 'just now' }}</span>
-                </div>
-                {% if item.tags %}
-                <div class="tag-list tag-list-compact">
-                    {% for tag in item.tags %}
-                    <a
-                        class="tag-pill tag-pill-link {% if active_tag == tag %}is-active{% endif %}"
-                        href="/account?tab={{ account_tab }}&tag={{ tag }}"
-                    >
-                        #{{ tag }}
-                    </a>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                <div class="account-people">
-                    <span>Created by {{ item.creator_label }}</span>
-                    <span>Last edited by {{ item.last_editor_label }}</span>
-                </div>
-                <div class="account-actions">
-                    <a class="button secondary" href="/{{ item.paste.slug }}">Open</a>
-                    <a class="button secondary" href="{{ item.edit_url }}">Edit</a>
-                    <a class="button secondary" href="/raw/{{ item.paste.slug }}">Raw</a>
-                    <button
-                        class="button secondary"
-                        type="button"
-                        data-share-open
-                        data-share-title="{{ item.paste.title or item.paste.slug }}"
-                        data-share-slug="{{ item.paste.slug }}"
-                        data-share-public-url="{{ item.public_url }}"
-                        data-share-raw-url="{{ item.raw_url }}"
-                        data-share-edit-url="{{ item.share_edit_url }}"
-                        data-share-has-raw="{{ 'true' if not item.paste.is_url else 'false' }}"
-                    >
-                        Share
-                    </button>
-                    {% if item.can_manage_tags %}
-                    <button
-                        class="button secondary"
-                        type="button"
-                        data-tags-open
-                        data-tags-slug="{{ item.paste.slug }}"
-                        data-tags-title="{{ item.paste.title or item.paste.slug }}"
-                        data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}"
-                        data-tags-tab="{{ account_tab }}"
-                        data-tags-filter="{{ active_tag or '' }}"
-                    >
-                        Tags
-                    </button>
-                    {% endif %}
-                    <a class="button secondary" href="{{ item.changes_url }}">Changes</a>
-                    {% if item.can_delete %}
-                    <form method="post" action="/account/delete/{{ item.paste.slug }}" data-delete-form data-delete-label="{{ item.paste.title or item.paste.slug }}">
-                        <button class="button danger" type="submit">Delete</button>
-                    </form>
-                    {% endif %}
-                </div>
+<div class="share-dialog" data-bookmark-dialog data-open="{{ 'true' if bookmark_dialog_open else 'false' }}" aria-hidden="{{ 'false' if bookmark_dialog_open else 'true' }}">
+    <button class="share-backdrop" type="button" data-bookmark-close aria-label="Close bookmark dialog"></button>
+    <section class="share-panel surface surface-narrow" role="dialog" aria-modal="true" aria-labelledby="bookmark-dialog-title">
+        <div class="share-panel-header">
+            <div>
+                <p class="eyebrow">{{ t("account.section_bookmarks") }}</p>
+                <h2 id="bookmark-dialog-title" data-bookmark-dialog-title>{{ t("common.edit") if bookmark_form_mode == 'edit' else t("account.new_bookmark") }}</h2>
+                <p class="mini-note" data-bookmark-dialog-caption>{{ bookmark_form_values.url or 'Save a private link for quick access.' }}</p>
             </div>
-        </article>
-        {% endfor %}
-    </div>
-    {% else %}
-    <p class="history-empty">
-        {% if active_tag %}
-        No documents with #{{ active_tag }} in this section yet.
-        {% elif account_tab == 'shared' %}
-        No shared documents yet. Open a private edit link while signed in and it will appear here.
-        {% else %}
-        No files saved to your profile yet. Publish a new paste while signed in and it will appear here.
-        {% endif %}
-    </p>
-    {% endif %}
-</section>
+            <button class="history-close" type="button" data-bookmark-close>{{ t("site.close") }}</button>
+        </div>
+
+        {% if bookmark_error %}<p class="message error">{{ bookmark_error }}</p>{% endif %}
+
+        <form method="post" action="{{ bookmark_form_action }}" class="auth-form" data-bookmark-form>
+            <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}" data-bookmark-form-filter>
+            <input type="hidden" name="filter_search" value="{{ active_search }}">
+            <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
+            <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
+            <label class="auth-field">
+                <span>{{ t("home.field_title") }}</span>
+                <input type="text" name="title" maxlength="120" placeholder="Infrastructure docs" value="{{ bookmark_form_values.title }}" data-bookmark-input="title">
+            </label>
+            <label class="auth-field">
+                <span>URL</span>
+                <input type="url" name="url" maxlength="2048" placeholder="https://example.com" value="{{ bookmark_form_values.url }}" required data-bookmark-input="url">
+            </label>
+            <label class="auth-field">
+                <span>Description</span>
+                <textarea class="account-entry-textarea" name="description" rows="4" maxlength="4000" placeholder="Optional note about this link, project context, credentials location, and so on." data-bookmark-input="description">{{ bookmark_form_values.description }}</textarea>
+            </label>
+            <label class="auth-field">
+                <span>{{ t("common.tags") }}</span>
+                <input type="text" name="tags" maxlength="240" placeholder="#infra #docs #team" value="{{ bookmark_form_values.tags }}" data-bookmark-input="tags">
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button primary" data-bookmark-submit>{{ t("common.save") }}</button>
+                <button type="button" class="button secondary" data-bookmark-close>{{ t("common.cancel") }}</button>
+            </div>
+        </form>
+    </section>
+</div>
 
 <div class="share-dialog" data-tags-dialog data-open="false" aria-hidden="true">
     <button class="share-backdrop" type="button" data-tags-close aria-label="Close tags dialog"></button>
     <section class="share-panel surface surface-narrow" role="dialog" aria-modal="true" aria-labelledby="tags-dialog-title">
         <div class="share-panel-header">
             <div>
-                <p class="eyebrow">Tags</p>
-                <h2 id="tags-dialog-title" data-tags-dialog-title>Edit tags</h2>
+                <p class="eyebrow">{{ t("common.tags") }}</p>
+                <h2 id="tags-dialog-title" data-tags-dialog-title>{{ t("common.tags") }}</h2>
                 <p class="mini-note" data-tags-dialog-slug></p>
             </div>
-            <button class="history-close" type="button" data-tags-close>Close</button>
+            <button class="history-close" type="button" data-tags-close>{{ t("site.close") }}</button>
         </div>
 
         <form method="post" data-tags-form class="auth-form">
             <input type="hidden" name="tab" value="{{ account_tab }}" data-tags-form-tab>
             <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}" data-tags-form-filter>
+            <input type="hidden" name="filter_search" value="{{ active_search }}">
+            <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
+            <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
             <label class="auth-field">
-                <span>Tags</span>
+                <span>{{ t("common.tags") }}</span>
                 <input type="text" name="tags" maxlength="240" placeholder="#json #config" data-tags-input>
             </label>
             <p class="mini-note">Use spaces or commas. Example: `#json #xray #notes`</p>
             <div class="form-actions">
-                <button type="submit" class="button primary">Save tags</button>
-                <button type="button" class="button secondary" data-tags-close>Cancel</button>
+                <button type="submit" class="button primary">{{ t("common.save") }}</button>
+                <button type="button" class="button secondary" data-tags-close>{{ t("common.cancel") }}</button>
             </div>
         </form>
     </section>
@@ -197,37 +528,54 @@
     <section class="share-panel surface surface-narrow" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title">
         <div class="share-panel-header">
             <div>
-                <p class="eyebrow">Share</p>
-                <h2 id="share-dialog-title" data-share-dialog-title>Paste links</h2>
+                <p class="eyebrow">{{ t("common.share") }}</p>
+                <h2 id="share-dialog-title" data-share-dialog-title>{{ t("common.share") }}</h2>
                 <p class="mini-note" data-share-dialog-slug></p>
             </div>
-            <button class="history-close" type="button" data-share-close>Close</button>
+            <button class="history-close" type="button" data-share-close>{{ t("site.close") }}</button>
         </div>
 
         <div class="link-stack">
             <label>
-                <span>Public URL</span>
+                <span>{{ t("success.public_url") }}</span>
                 <div class="inline-copy">
                     <input type="text" readonly data-share-input="public">
-                    <button type="button" class="button secondary" data-copy data-share-copy="public">Copy</button>
+                    <button type="button" class="button secondary" data-copy data-share-copy="public">{{ t("common.copy") }}</button>
                 </div>
             </label>
-
             <label data-share-row="raw">
-                <span>Raw URL</span>
+                <span>{{ t("success.raw_url") }}</span>
                 <div class="inline-copy">
                     <input type="text" readonly data-share-input="raw">
-                    <button type="button" class="button secondary" data-copy data-share-copy="raw">Copy</button>
+                    <button type="button" class="button secondary" data-copy data-share-copy="raw">{{ t("common.copy") }}</button>
                 </div>
             </label>
-
             <label data-share-row="edit">
-                <span>Private edit link</span>
+                <span>{{ t("success.edit_url") }}</span>
                 <div class="inline-copy">
                     <input type="text" readonly data-share-input="edit">
-                    <button type="button" class="button secondary" data-copy data-share-copy="edit">Copy</button>
+                    <button type="button" class="button secondary" data-copy data-share-copy="edit">{{ t("common.copy") }}</button>
                 </div>
             </label>
+        </div>
+    </section>
+</div>
+
+<div class="share-dialog" data-note-preview-dialog data-open="false" aria-hidden="true">
+    <button class="share-backdrop" type="button" data-note-preview-close aria-label="Close note preview"></button>
+    <section class="share-panel surface note-preview-panel" role="dialog" aria-modal="true" aria-labelledby="note-preview-title">
+        <div class="share-panel-header">
+            <div>
+                <p class="eyebrow">{{ t("common.preview") }}</p>
+                <h2 id="note-preview-title" data-note-preview-title>{{ t("account.note") }}</h2>
+                <p class="mini-note note-preview-meta" data-note-preview-meta></p>
+                <p class="mini-note note-preview-meta" data-note-preview-updated></p>
+            </div>
+            <button class="history-close" type="button" data-note-preview-close>{{ t("site.close") }}</button>
+        </div>
+
+        <div class="note-preview-panel-body">
+            <div class="account-note-rich account-note-rich-expanded" data-note-preview-content></div>
         </div>
     </section>
 </div>

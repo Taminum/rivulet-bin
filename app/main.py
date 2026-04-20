@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import calendar
 import base64
+import ipaddress
 import json
 import re
-from datetime import datetime, timezone
+import socket
+from collections import Counter
+from datetime import date, datetime, timezone
+from html.parser import HTMLParser
+from urllib.parse import urlparse
+from urllib.request import Request as UrlRequest, urlopen
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.auth import (
     AUTH_COOKIE_NAME,
@@ -23,7 +31,21 @@ from app.auth import (
 )
 from app.config import Settings, get_settings
 from app.database import get_session, init_database
-from app.models import Paste, PasteCollaborator, PasteRevision, User
+from app.i18n import (
+    SUPPORTED_LANGUAGES,
+    SUPPORTED_THEME_PREFERENCES,
+    calendar_label,
+    calendar_weekdays,
+    client_messages,
+    language_options,
+    mode_options as translated_mode_options,
+    normalize_language,
+    normalize_theme_preference,
+    syntax_options as translated_syntax_options,
+    theme_options as translated_theme_options,
+    translate,
+)
+from app.models import Bookmark, Note, Paste, PasteCollaborator, PasteRevision, User
 from app.rendering import (
     decide_view_mode,
     generate_edit_key,
@@ -68,10 +90,30 @@ HISTORY_COOKIE_NAME = "rivulet_history"
 HISTORY_LIMIT = 20
 ASSET_VERSION = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
 USERNAME_RE = re.compile(r"^[a-z0-9_]{3,32}$")
+LANGUAGE_COOKIE_NAME = "rivulet_lang"
+THEME_COOKIE_NAME = "rivulet_theme"
 TAG_SPLIT_RE = re.compile(r"[\s,]+")
 TAG_SANITIZE_RE = re.compile(r"[^\w-]+", re.UNICODE)
 MAX_TAGS = 8
 MAX_TAG_LENGTH = 32
+BOOKMARK_URL_LIMIT = 2048
+PROFILE_IMPORT_LIMIT = 25_000_000
+PROFILE_EXPORT_SECTIONS = ("all", "saved", "shared", "bookmarks", "notes", "links")
+NOTE_INLINE_TOKEN_RE = re.compile(
+    r"https?://[^\s<]+|(?<![\w/])/(?:[A-Za-z0-9][\w-]*)(?:/(?:[A-Za-z0-9][\w-]*))*"
+)
+ACCOUNT_NOTICE_KEYS = {
+    "bookmark_created": "notice.bookmark_created",
+    "bookmark_updated": "notice.bookmark_updated",
+    "bookmark_deleted": "notice.bookmark_deleted",
+    "bookmark_tags_updated": "notice.bookmark_tags_updated",
+    "note_created": "notice.note_created",
+    "note_updated": "notice.note_updated",
+    "note_deleted": "notice.note_deleted",
+    "note_tags_updated": "notice.note_tags_updated",
+    "settings_updated": "notice.settings_updated",
+    "import_completed": "notice.import_completed",
+}
 
 
 @app.on_event("startup")
@@ -82,10 +124,14 @@ def on_startup() -> None:
 @app.get("/", response_class=HTMLResponse)
 def home(
     request: Request,
+    mode: str | None = Query(default=None),
+    syntax: str | None = Query(default=None),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> HTMLResponse:
     current_user = _current_user(request, session, settings)
+    requested_mode = mode if mode in VALID_MODE_VALUES else "auto"
+    requested_syntax = syntax if syntax in VALID_SYNTAX_VALUES else "auto"
     return templates.TemplateResponse(
         request=request,
         name="home.html",
@@ -100,8 +146,8 @@ def home(
                 "tags": "",
                 "content": "",
                 "custom_slug": "",
-                "syntax": "auto",
-                "mode": "auto",
+                "syntax": requested_syntax,
+                "mode": requested_mode,
             },
             error=None,
             history_items=_history_items(request, session),
@@ -131,6 +177,7 @@ def register_form(
     settings: Settings = Depends(get_settings),
 ) -> HTMLResponse:
     current_user = _current_user(request, session, settings)
+    language = _resolve_language(request, current_user)
     target_path = normalize_next_path(next_path)
     if current_user:
         return RedirectResponse(url=target_path, status_code=status.HTTP_303_SEE_OTHER)
@@ -138,7 +185,7 @@ def register_form(
     return _render_auth_page(
         request,
         settings,
-        title="Create account",
+        title=translate(language, "auth.register_title"),
         auth_mode="register",
         form_values={"username": ""},
         next_path=target_path,
@@ -156,17 +203,18 @@ def register(
     settings: Settings = Depends(get_settings),
 ):
     current_user = _current_user(request, session, settings)
+    language = _resolve_language(request, current_user)
     target_path = normalize_next_path(next_path)
     if current_user:
         return RedirectResponse(url=target_path, status_code=status.HTTP_303_SEE_OTHER)
 
     normalized_username = _normalize_username(username)
-    error = _validate_registration_form(normalized_username, password, confirm_password)
+    error = _validate_registration_form(normalized_username, password, confirm_password, language)
     if error:
         return _render_auth_page(
             request,
             settings,
-            title="Create account",
+            title=translate(language, "auth.register_title"),
             auth_mode="register",
             form_values={"username": normalized_username},
             error=error,
@@ -179,10 +227,10 @@ def register(
         return _render_auth_page(
             request,
             settings,
-            title="Create account",
+            title=translate(language, "auth.register_title"),
             auth_mode="register",
             form_values={"username": normalized_username},
-            error="This username is already taken.",
+            error=translate(language, "auth.error_taken"),
             next_path=target_path,
             status_code=status.HTTP_400_BAD_REQUEST,
         )
@@ -196,6 +244,7 @@ def register(
 
     response = RedirectResponse(url=target_path, status_code=status.HTTP_303_SEE_OTHER)
     _set_auth_cookie(response, user.id, settings)
+    _set_preference_cookies(response, user)
     return response
 
 
@@ -207,6 +256,7 @@ def login_form(
     settings: Settings = Depends(get_settings),
 ) -> HTMLResponse:
     current_user = _current_user(request, session, settings)
+    language = _resolve_language(request, current_user)
     target_path = normalize_next_path(next_path)
     if current_user:
         return RedirectResponse(url=target_path, status_code=status.HTTP_303_SEE_OTHER)
@@ -214,7 +264,7 @@ def login_form(
     return _render_auth_page(
         request,
         settings,
-        title="Sign in",
+        title=translate(language, "auth.login_title"),
         auth_mode="login",
         form_values={"username": ""},
         next_path=target_path,
@@ -231,6 +281,7 @@ def login(
     settings: Settings = Depends(get_settings),
 ):
     current_user = _current_user(request, session, settings)
+    language = _resolve_language(request, current_user)
     target_path = normalize_next_path(next_path)
     if current_user:
         return RedirectResponse(url=target_path, status_code=status.HTTP_303_SEE_OTHER)
@@ -241,16 +292,17 @@ def login(
         return _render_auth_page(
             request,
             settings,
-            title="Sign in",
+            title=translate(language, "auth.login_title"),
             auth_mode="login",
             form_values={"username": normalized_username},
-            error="Wrong username or password.",
+            error=translate(language, "auth.error_wrong_credentials"),
             next_path=target_path,
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
     response = RedirectResponse(url=target_path, status_code=status.HTTP_303_SEE_OTHER)
     _set_auth_cookie(response, user.id, settings)
+    _set_preference_cookies(response, user)
     return response
 
 
@@ -266,8 +318,15 @@ def account(
     request: Request,
     deleted: str | None = Query(default=None),
     updated_tags: str | None = Query(default=None),
+    notice: str | None = Query(default=None),
+    imported: int | None = Query(default=None),
     tab: str | None = Query(default=None),
     tag: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    created: str | None = Query(default=None),
+    month: str | None = Query(default=None),
+    bookmark_edit: int | None = Query(default=None),
+    note_edit: int | None = Query(default=None),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> HTMLResponse:
@@ -275,57 +334,627 @@ def account(
     if current_user is None:
         return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
 
-    active_tab = _normalize_account_tab(tab)
-    active_tag = _normalize_tag(tag or "")
-
-    owned_pastes = session.scalars(
-        select(Paste)
-        .options(joinedload(Paste.creator), joinedload(Paste.last_editor))
-        .where(Paste.owner_id == current_user.id)
-        .order_by(Paste.updated_at.desc(), Paste.created_at.desc())
-    ).all()
-
-    shared_memberships = session.scalars(
-        select(PasteCollaborator)
-        .options(
-            joinedload(PasteCollaborator.paste).joinedload(Paste.creator),
-            joinedload(PasteCollaborator.paste).joinedload(Paste.last_editor),
-        )
-        .where(PasteCollaborator.user_id == current_user.id)
-        .order_by(PasteCollaborator.joined_at.desc())
-    ).all()
-
-    shared_pastes = [
-        membership.paste
-        for membership in shared_memberships
-        if membership.paste is not None and membership.paste.owner_id != current_user.id
-    ]
-    owned_items = _profile_items(request, owned_pastes, current_user, shared=False)
-    shared_items = _profile_items(request, shared_pastes, current_user, shared=True)
-    filtered_owned_items = _filter_profile_items_by_tag(owned_items, active_tag)
-    filtered_shared_items = _filter_profile_items_by_tag(shared_items, active_tag)
-    profile_items = filtered_shared_items if active_tab == "shared" else filtered_owned_items
-
-    return templates.TemplateResponse(
-        request=request,
-        name="account.html",
-        context=_base_context(
-            request,
-            settings,
-            title="Profile",
-            current_user=current_user,
-            account_tab=active_tab,
-            active_tag=active_tag,
-            profile_items=profile_items,
-            profile_count=len(profile_items),
-            owned_count=len(owned_items),
-            shared_count=len(shared_items),
-            saved_tab_url=_account_url(request, "saved", active_tag),
-            shared_tab_url=_account_url(request, "shared", active_tag),
-            clear_tag_url=_account_url(request, active_tab),
-            account_message=_account_message(deleted, updated_tags),
-        ),
+    return _render_account_page(
+        request,
+        session,
+        settings,
+        current_user,
+        active_tab=_normalize_account_tab(tab),
+        active_tag=_normalize_tag(tag or ""),
+        active_search=q,
+        active_created=created,
+        active_month=month,
+        deleted=deleted,
+        updated_tags=updated_tags,
+        notice=notice,
+        imported_count=imported,
+        bookmark_edit_id=bookmark_edit,
+        note_edit_id=note_edit,
     )
+
+
+@app.post("/account/settings/preferences")
+def update_account_preferences(
+    request: Request,
+    preferred_language: str = Form(default="en"),
+    theme_preference: str = Form(default="dark"),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=%2Faccount%3Ftab%3Dsettings", status_code=status.HTTP_303_SEE_OTHER)
+
+    current_language = _resolve_language(request, current_user)
+    raw_language = (preferred_language or "").strip().lower()
+    raw_theme = (theme_preference or "").strip().lower()
+    error: str | None = None
+
+    if raw_language not in SUPPORTED_LANGUAGES:
+        error = translate(current_language, "settings.error_language")
+    elif raw_theme not in SUPPORTED_THEME_PREFERENCES:
+        error = translate(current_language, "settings.error_theme")
+
+    if error:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="settings",
+            settings_form={
+                "preferred_language": normalize_language(raw_language),
+                "theme_preference": normalize_theme_preference(raw_theme),
+            },
+            settings_error=error,
+        )
+
+    current_user.preferred_language = normalize_language(raw_language)
+    current_user.theme_preference = normalize_theme_preference(raw_theme)
+    session.add(current_user)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(request, "settings", notice="settings_updated")
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+    _set_preference_cookies(response, current_user)
+    return response
+
+
+@app.get("/account/export")
+def export_account_archive(
+    request: Request,
+    section: str = Query(default="all"),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=%2Faccount%3Ftab%3Dsettings", status_code=status.HTTP_303_SEE_OTHER)
+
+    normalized_section = _normalize_profile_transfer_section(section)
+    if normalized_section is None:
+        raise HTTPException(status_code=400, detail="Unsupported export section")
+
+    payload = _build_profile_export_payload(session, current_user, normalized_section)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    filename = f"rivulet-{current_user.username}-{normalized_section}-{timestamp}.json"
+    body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return Response(content=body, media_type="application/json; charset=utf-8", headers=headers)
+
+
+@app.post("/account/import")
+async def import_account_archive(
+    request: Request,
+    section: str = Form(default="all"),
+    archive: UploadFile | None = File(default=None),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=%2Faccount%3Ftab%3Dsettings", status_code=status.HTTP_303_SEE_OTHER)
+
+    current_language = _resolve_language(request, current_user)
+    normalized_section = _normalize_profile_transfer_section(section)
+    if normalized_section is None:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="settings",
+            import_form={"section": "all"},
+            import_error=translate(current_language, "settings.error_file_shape"),
+        )
+
+    if archive is None:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="settings",
+            import_form={"section": normalized_section},
+            import_error=translate(current_language, "settings.error_file_missing"),
+        )
+
+    payload_bytes = await archive.read()
+    if not payload_bytes:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="settings",
+            import_form={"section": normalized_section},
+            import_error=translate(current_language, "settings.error_file_missing"),
+        )
+    if len(payload_bytes) > PROFILE_IMPORT_LIMIT:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="settings",
+            import_form={"section": normalized_section},
+            import_error=translate(current_language, "settings.error_file_large"),
+        )
+
+    try:
+        payload = json.loads(payload_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="settings",
+            import_form={"section": normalized_section},
+            import_error=translate(current_language, "settings.error_file_decode"),
+        )
+
+    try:
+        imported_count = _import_profile_payload(session, settings, current_user, payload, normalized_section)
+    except ValueError as exc:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="settings",
+            import_form={"section": normalized_section},
+            import_error=str(exc),
+        )
+
+    if imported_count <= 0:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="settings",
+            import_form={"section": normalized_section},
+            import_error=translate(current_language, "settings.error_import_empty"),
+        )
+
+    redirect_url = _build_account_redirect_url(request, "settings", notice="import_completed")
+    redirect_url = f"{redirect_url}&imported={imported_count}"
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+    _set_preference_cookies(response, current_user)
+    return response
+
+
+@app.post("/account/bookmarks")
+def create_bookmark(
+    request: Request,
+    title: str = Form(default=""),
+    url: str = Form(...),
+    description: str = Form(default=""),
+    tags: str = Form(default=""),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
+    current_language = _resolve_language(request, current_user)
+
+    normalized_tags = _normalize_tags(tags)
+    normalized_filter_tag = _normalize_tag(filter_tag)
+    normalized_url = _normalize_bookmark_url(url)
+    cleaned_title = title.strip()[:120]
+    cleaned_description = description.strip()
+
+    error: str | None = None
+    if normalized_url is None:
+        error = translate(current_language, "error.bookmark_url")
+    elif len(normalized_url) > BOOKMARK_URL_LIMIT:
+        error = translate(current_language, "error.bookmark_url_limit", limit=BOOKMARK_URL_LIMIT)
+    elif len(cleaned_description) > 4000:
+        error = translate(current_language, "error.bookmark_description_limit")
+
+    if error:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="bookmarks",
+            active_tag=normalized_filter_tag,
+            active_search=filter_search,
+            active_created=filter_created,
+            active_month=filter_month,
+            bookmark_form=_bookmark_form_state(
+                title=cleaned_title,
+                url=url,
+                description=cleaned_description,
+                tags=normalized_tags,
+            ),
+            bookmark_error=error,
+        )
+
+    bookmark = Bookmark(
+        user_id=current_user.id,
+        title=cleaned_title or None,
+        url=normalized_url,
+        description=cleaned_description or None,
+        tags_json=_serialize_tags(normalized_tags),
+    )
+    session.add(bookmark)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(
+        request,
+        "bookmarks",
+        notice="bookmark_created",
+        tag=normalized_filter_tag if normalized_filter_tag in normalized_tags else None,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
+    )
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/account/bookmarks/{bookmark_id}")
+def update_bookmark(
+    bookmark_id: int,
+    request: Request,
+    title: str = Form(default=""),
+    url: str = Form(...),
+    description: str = Form(default=""),
+    tags: str = Form(default=""),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
+    current_language = _resolve_language(request, current_user)
+
+    bookmark = _get_bookmark_or_404(session, bookmark_id, current_user)
+    normalized_tags = _normalize_tags(tags)
+    normalized_filter_tag = _normalize_tag(filter_tag)
+    normalized_url = _normalize_bookmark_url(url)
+    cleaned_title = title.strip()[:120]
+    cleaned_description = description.strip()
+
+    error: str | None = None
+    if normalized_url is None:
+        error = translate(current_language, "error.bookmark_url")
+    elif len(normalized_url) > BOOKMARK_URL_LIMIT:
+        error = translate(current_language, "error.bookmark_url_limit", limit=BOOKMARK_URL_LIMIT)
+    elif len(cleaned_description) > 4000:
+        error = translate(current_language, "error.bookmark_description_limit")
+
+    if error:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="bookmarks",
+            active_tag=normalized_filter_tag,
+            active_search=filter_search,
+            active_created=filter_created,
+            active_month=filter_month,
+            bookmark_form=_bookmark_form_state(
+                bookmark_id=bookmark.id,
+                title=cleaned_title,
+                url=url,
+                description=cleaned_description,
+                tags=normalized_tags,
+            ),
+            bookmark_error=error,
+        )
+
+    bookmark.title = cleaned_title or None
+    bookmark.url = normalized_url
+    bookmark.description = cleaned_description or None
+    bookmark.tags_json = _serialize_tags(normalized_tags)
+    bookmark.updated_at = datetime.now(timezone.utc)
+    session.add(bookmark)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(
+        request,
+        "bookmarks",
+        notice="bookmark_updated",
+        tag=normalized_filter_tag if normalized_filter_tag in normalized_tags else None,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
+    )
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/account/bookmarks/{bookmark_id}/tags")
+def update_account_bookmark_tags(
+    bookmark_id: int,
+    request: Request,
+    tags: str = Form(default=""),
+    tab: str = Form(default="bookmarks"),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> RedirectResponse:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
+
+    bookmark = _get_bookmark_or_404(session, bookmark_id, current_user)
+    normalized_tags = _normalize_tags(tags)
+    normalized_filter_tag = _normalize_tag(filter_tag)
+
+    bookmark.tags_json = _serialize_tags(normalized_tags)
+    bookmark.updated_at = datetime.now(timezone.utc)
+    session.add(bookmark)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(
+        request,
+        tab,
+        notice="bookmark_tags_updated",
+        tag=normalized_filter_tag if normalized_filter_tag in normalized_tags else None,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
+    )
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/account/bookmarks/{bookmark_id}/delete")
+def delete_account_bookmark(
+    bookmark_id: int,
+    request: Request,
+    tab: str = Form(default="bookmarks"),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> RedirectResponse:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
+
+    bookmark = _get_bookmark_or_404(session, bookmark_id, current_user)
+    normalized_filter_tag = _normalize_tag(filter_tag)
+    session.delete(bookmark)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(
+        request,
+        tab,
+        notice="bookmark_deleted",
+        tag=normalized_filter_tag,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
+    )
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/account/notes")
+def create_note(
+    request: Request,
+    title: str = Form(default=""),
+    content: str = Form(...),
+    tags: str = Form(default=""),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
+    current_language = _resolve_language(request, current_user)
+
+    normalized_tags = _normalize_tags(tags)
+    normalized_filter_tag = _normalize_tag(filter_tag)
+    cleaned_title = title.strip()[:120]
+    note_content = content
+
+    error: str | None = None
+    if not note_content.strip():
+        error = translate(current_language, "error.empty_note")
+    elif len(note_content) > settings.max_content_size:
+        error = translate(current_language, "error.note_limit", limit=settings.max_content_size)
+
+    if error:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="notes",
+            active_tag=normalized_filter_tag,
+            active_search=filter_search,
+            active_created=filter_created,
+            active_month=filter_month,
+            note_form=_note_form_state(
+                title=cleaned_title,
+                content=note_content,
+                tags=normalized_tags,
+            ),
+            note_error=error,
+        )
+
+    note = Note(
+        user_id=current_user.id,
+        title=cleaned_title or None,
+        content=note_content,
+        tags_json=_serialize_tags(normalized_tags),
+    )
+    session.add(note)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(
+        request,
+        "notes",
+        notice="note_created",
+        tag=normalized_filter_tag if normalized_filter_tag in normalized_tags else None,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
+    )
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/account/notes/{note_id}")
+def update_note(
+    note_id: int,
+    request: Request,
+    title: str = Form(default=""),
+    content: str = Form(...),
+    tags: str = Form(default=""),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
+    current_language = _resolve_language(request, current_user)
+
+    note = _get_note_or_404(session, note_id, current_user)
+    normalized_tags = _normalize_tags(tags)
+    normalized_filter_tag = _normalize_tag(filter_tag)
+    cleaned_title = title.strip()[:120]
+    note_content = content
+
+    error: str | None = None
+    if not note_content.strip():
+        error = translate(current_language, "error.empty_note")
+    elif len(note_content) > settings.max_content_size:
+        error = translate(current_language, "error.note_limit", limit=settings.max_content_size)
+
+    if error:
+        return _render_account_page(
+            request,
+            session,
+            settings,
+            current_user,
+            active_tab="notes",
+            active_tag=normalized_filter_tag,
+            active_search=filter_search,
+            active_created=filter_created,
+            active_month=filter_month,
+            note_form=_note_form_state(
+                note_id=note.id,
+                title=cleaned_title,
+                content=note_content,
+                tags=normalized_tags,
+            ),
+            note_error=error,
+        )
+
+    note.title = cleaned_title or None
+    note.content = note_content
+    note.tags_json = _serialize_tags(normalized_tags)
+    note.updated_at = datetime.now(timezone.utc)
+    session.add(note)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(
+        request,
+        "notes",
+        notice="note_updated",
+        tag=normalized_filter_tag if normalized_filter_tag in normalized_tags else None,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
+    )
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/account/notes/{note_id}/tags")
+def update_account_note_tags(
+    note_id: int,
+    request: Request,
+    tags: str = Form(default=""),
+    tab: str = Form(default="notes"),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> RedirectResponse:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
+
+    note = _get_note_or_404(session, note_id, current_user)
+    normalized_tags = _normalize_tags(tags)
+    normalized_filter_tag = _normalize_tag(filter_tag)
+
+    note.tags_json = _serialize_tags(normalized_tags)
+    note.updated_at = datetime.now(timezone.utc)
+    session.add(note)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(
+        request,
+        tab,
+        notice="note_tags_updated",
+        tag=normalized_filter_tag if normalized_filter_tag in normalized_tags else None,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
+    )
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.post("/account/notes/{note_id}/delete")
+def delete_account_note(
+    note_id: int,
+    request: Request,
+    tab: str = Form(default="notes"),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> RedirectResponse:
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
+
+    note = _get_note_or_404(session, note_id, current_user)
+    normalized_filter_tag = _normalize_tag(filter_tag)
+    session.delete(note)
+    session.commit()
+
+    redirect_url = _build_account_redirect_url(
+        request,
+        tab,
+        notice="note_deleted",
+        tag=normalized_filter_tag,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
+    )
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/account/tags/{slug}")
@@ -335,6 +964,9 @@ def update_account_tags(
     tags: str = Form(default=""),
     tab: str = Form(default="saved"),
     filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
@@ -355,14 +987,16 @@ def update_account_tags(
     session.add(paste)
     session.commit()
 
-    redirect_url = request.url_for("account").include_query_params(
-        tab=_normalize_account_tab(tab),
+    redirect_url = _build_account_redirect_url(
+        request,
+        tab,
         updated_tags=paste.slug,
+        tag=normalized_filter_tag if normalized_filter_tag in normalized_tags else None,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
     )
-    if normalized_filter_tag and normalized_filter_tag in normalized_tags:
-        redirect_url = redirect_url.include_query_params(tag=normalized_filter_tag)
-
-    return RedirectResponse(url=str(redirect_url), status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/healthz")
@@ -383,13 +1017,14 @@ def publish(
     settings: Settings = Depends(get_settings),
 ):
     current_user = _current_user(request, session, settings)
+    current_language = _resolve_language(request, current_user)
     syntax = syntax.strip().lower()
     mode = mode.strip().lower()
     title = title.strip()[:120] or None
     normalized_tags = _normalize_tags(tags)
     effective_syntax = _resolve_effective_syntax(content, syntax, mode)
 
-    option_error = _validate_editor_options(syntax, mode)
+    option_error = _validate_editor_options(syntax, mode, current_language)
     if option_error:
         return _home_with_error(
             request,
@@ -410,7 +1045,7 @@ def publish(
             request,
             settings,
             session,
-            "Paste content can't be empty.",
+            translate(current_language, "error.empty_paste"),
             title or "",
             tags,
             content,
@@ -425,7 +1060,7 @@ def publish(
             request,
             settings,
             session,
-            f"Content is too large. Limit is {settings.max_content_size} characters.",
+            translate(current_language, "error.content_limit", limit=settings.max_content_size),
             title or "",
             tags,
             content,
@@ -436,6 +1071,7 @@ def publish(
         )
 
     is_url, view_mode = decide_view_mode(content.strip(), mode, effective_syntax)
+    title = _resolve_short_link_title(title, content.strip(), is_url)
     validation_issue = None if is_url else validate_content(content, effective_syntax)
     if validation_issue:
         return _home_with_error(
@@ -597,6 +1233,7 @@ def edit_paste(
 ):
     paste = _get_paste_or_404(session, slug)
     current_user = _current_user(request, session, settings)
+    current_language = _resolve_language(request, current_user)
     _assert_can_edit_paste(paste, key, current_user)
     _maybe_attach_collaborator(session, paste, current_user, key)
     previous_slug = paste.slug
@@ -607,7 +1244,7 @@ def edit_paste(
     normalized_tags = _normalize_tags(tags)
     effective_syntax = _resolve_effective_syntax(content, syntax, mode)
 
-    option_error = _validate_editor_options(syntax, mode)
+    option_error = _validate_editor_options(syntax, mode, current_language)
     if option_error:
         return _edit_with_error(
             request,
@@ -632,7 +1269,7 @@ def edit_paste(
             session,
             paste,
             key,
-            "Paste content can't be empty.",
+            translate(current_language, "error.empty_paste"),
             title or "",
             tags,
             content,
@@ -649,7 +1286,7 @@ def edit_paste(
             session,
             paste,
             key,
-            f"Content is too large. Limit is {settings.max_content_size} characters.",
+            translate(current_language, "error.content_limit", limit=settings.max_content_size),
             title or "",
             tags,
             content,
@@ -660,6 +1297,7 @@ def edit_paste(
         )
 
     is_url, view_mode = decide_view_mode(content.strip(), mode, effective_syntax)
+    title = _resolve_short_link_title(title, content.strip(), is_url)
     validation_issue = None if is_url else validate_content(content, effective_syntax)
     if validation_issue:
         return _edit_with_error(
@@ -725,6 +1363,11 @@ def edit_paste(
 def delete_account_paste(
     slug: str,
     request: Request,
+    tab: str = Form(default="saved"),
+    filter_tag: str = Form(default=""),
+    filter_search: str = Form(default=""),
+    filter_created: str = Form(default=""),
+    filter_month: str = Form(default=""),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
 ) -> RedirectResponse:
@@ -733,17 +1376,24 @@ def delete_account_paste(
         return RedirectResponse(url="/login?next=/account", status_code=status.HTTP_303_SEE_OTHER)
 
     paste = _get_paste_or_404(session, slug)
-    if not _is_owned_by_user(paste, current_user):
+    if not _can_user_delete_paste(paste, current_user):
         raise HTTPException(status_code=403, detail="You can only delete your own paste")
 
     deleted_slug = paste.slug
+    normalized_filter_tag = _normalize_tag(filter_tag)
     session.delete(paste)
     session.commit()
 
-    response = RedirectResponse(
-        url=str(request.url_for("account").include_query_params(deleted=deleted_slug)),
-        status_code=status.HTTP_303_SEE_OTHER,
+    redirect_url = _build_account_redirect_url(
+        request,
+        tab,
+        deleted=deleted_slug,
+        tag=normalized_filter_tag,
+        search_query=filter_search,
+        created=filter_created,
+        month=filter_month,
     )
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
     _remove_history_slug(response, request, deleted_slug)
     return response
 
@@ -910,14 +1560,26 @@ def view_paste(
 
 
 def _base_context(request: Request, settings: Settings, current_user: User | None = None, **extra):
+    language = _resolve_language(request, current_user)
+    theme_preference = _resolve_theme_preference(request, current_user)
+
+    def t(key: str, **kwargs: object) -> str:
+        return translate(language, key, **kwargs)
+
     return {
         "request": request,
         "site_name": settings.site_name,
         "tagline": settings.tagline,
         "asset_version": ASSET_VERSION,
         "current_user": current_user,
-        "syntax_options": SYNTAX_OPTIONS,
-        "mode_options": MODE_OPTIONS,
+        "current_language": language,
+        "default_theme_preference": theme_preference,
+        "language_options": language_options(),
+        "theme_options": translated_theme_options(language),
+        "syntax_options": translated_syntax_options(language),
+        "mode_options": translated_mode_options(language),
+        "client_texts": client_messages(language),
+        "t": t,
         **extra,
     }
 
@@ -1055,17 +1717,83 @@ def _format_tags_input(tags: list[str]) -> str:
     return " ".join(f"#{tag}" for tag in tags)
 
 
+def _normalize_account_search(value: str | None) -> str:
+    if not value:
+        return ""
+    return " ".join(value.split())[:120]
+
+
+def _normalize_account_date(value: str | date | None) -> date | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _normalize_account_month(value: str | date | None, fallback: date | None = None) -> date:
+    if isinstance(value, date):
+        return value.replace(day=1)
+    if isinstance(value, str) and value.strip():
+        try:
+            return datetime.strptime(value.strip(), "%Y-%m").date().replace(day=1)
+        except ValueError:
+            pass
+    base = fallback or datetime.now(timezone.utc).date()
+    return base.replace(day=1)
+
+
+def _format_account_date(value: date | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _format_account_month(value: date | None) -> str | None:
+    return value.strftime("%Y-%m") if value else None
+
+
+def _shift_account_month(month_start: date, delta: int) -> date:
+    total_months = month_start.year * 12 + month_start.month - 1 + delta
+    year, month_index = divmod(total_months, 12)
+    return date(year, month_index + 1, 1)
+
+
 def _filter_profile_items_by_tag(items: list[dict[str, object]], tag: str | None) -> list[dict[str, object]]:
     if not tag:
         return items
     return [item for item in items if tag in item.get("tags", [])]
 
 
-def _validate_editor_options(syntax: str, mode: str) -> str | None:
+def _filter_profile_items_by_search(items: list[dict[str, object]], search_query: str) -> list[dict[str, object]]:
+    normalized_search = _normalize_account_search(search_query)
+    if not normalized_search:
+        return items
+
+    tokens = [token.lower() for token in normalized_search.split()]
+    if not tokens:
+        return items
+
+    filtered_items: list[dict[str, object]] = []
+    for item in items:
+        haystack = str(item.get("search_text", "")).lower()
+        if all(token in haystack for token in tokens):
+            filtered_items.append(item)
+    return filtered_items
+
+
+def _filter_profile_items_by_created_date(items: list[dict[str, object]], created_on: date | None) -> list[dict[str, object]]:
+    if created_on is None:
+        return items
+    return [item for item in items if item.get("created_date") == created_on]
+
+
+def _validate_editor_options(syntax: str, mode: str, language: str) -> str | None:
     if syntax not in VALID_SYNTAX_VALUES:
-        return "Unsupported syntax value."
+        return translate(language, "error.options")
     if mode not in VALID_MODE_VALUES:
-        return "Unsupported mode value."
+        return translate(language, "error.options")
     return None
 
 
@@ -1079,6 +1807,33 @@ def _current_user(request: Request, session: Session, settings: Settings) -> Use
     request.state.current_user = user
     request.state.current_user_loaded = True
     return user
+
+
+def _resolve_language(request: Request, current_user: User | None = None) -> str:
+    if current_user is not None:
+        return normalize_language(getattr(current_user, "preferred_language", None))
+    return normalize_language(request.cookies.get(LANGUAGE_COOKIE_NAME))
+
+
+def _resolve_theme_preference(request: Request, current_user: User | None = None) -> str:
+    if current_user is not None:
+        return normalize_theme_preference(getattr(current_user, "theme_preference", None))
+    return normalize_theme_preference(request.cookies.get(THEME_COOKIE_NAME))
+
+
+def _set_preference_cookies(response: Response, user: User) -> None:
+    response.set_cookie(
+        LANGUAGE_COOKIE_NAME,
+        normalize_language(user.preferred_language),
+        max_age=60 * 60 * 24 * 365,
+        samesite="lax",
+    )
+    response.set_cookie(
+        THEME_COOKIE_NAME,
+        normalize_theme_preference(user.theme_preference),
+        max_age=60 * 60 * 24 * 365,
+        samesite="lax",
+    )
 
 
 def _set_auth_cookie(response: RedirectResponse, user_id: int, settings: Settings) -> None:
@@ -1099,13 +1854,13 @@ def _normalize_username(value: str) -> str:
     return value.strip().lower()
 
 
-def _validate_registration_form(username: str, password: str, confirm_password: str) -> str | None:
+def _validate_registration_form(username: str, password: str, confirm_password: str, language: str) -> str | None:
     if not USERNAME_RE.fullmatch(username):
-        return "Username must be 3-32 characters long and use only lowercase letters, numbers, or underscores."
+        return translate(language, "auth.error_username")
     if len(password) < 8:
-        return "Password must be at least 8 characters long."
+        return translate(language, "auth.error_password_length")
     if password != confirm_password:
-        return "Passwords do not match."
+        return translate(language, "auth.error_password_mismatch")
     return None
 
 
@@ -1137,12 +1892,725 @@ def _render_auth_page(
     )
 
 
+def _render_account_page(
+    request: Request,
+    session: Session,
+    settings: Settings,
+    current_user: User,
+    *,
+    active_tab: str,
+    active_tag: str | None = None,
+    active_search: str | None = None,
+    active_created: str | date | None = None,
+    active_month: str | date | None = None,
+    deleted: str | None = None,
+    updated_tags: str | None = None,
+    notice: str | None = None,
+    bookmark_edit_id: int | None = None,
+    note_edit_id: int | None = None,
+    bookmark_form: dict[str, str] | None = None,
+    bookmark_error: str | None = None,
+    note_form: dict[str, str] | None = None,
+    note_error: str | None = None,
+    settings_form: dict[str, str] | None = None,
+    settings_error: str | None = None,
+    import_form: dict[str, str] | None = None,
+    import_error: str | None = None,
+    imported_count: int | None = None,
+) -> HTMLResponse:
+    language = _resolve_language(request, current_user)
+    tr = lambda key, **kwargs: translate(language, key, **kwargs)
+    normalized_tab = _normalize_account_tab(active_tab)
+    normalized_tag = _normalize_tag(active_tag or "")
+    normalized_search = _normalize_account_search(active_search)
+    normalized_created = _normalize_account_date(active_created)
+    normalized_month = _normalize_account_month(active_month, fallback=normalized_created)
+
+    owned_pastes = session.scalars(
+        select(Paste)
+        .options(joinedload(Paste.creator), joinedload(Paste.last_editor))
+        .where(Paste.owner_id == current_user.id)
+        .order_by(Paste.updated_at.desc(), Paste.created_at.desc())
+    ).all()
+
+    shared_memberships = session.scalars(
+        select(PasteCollaborator)
+        .options(
+            joinedload(PasteCollaborator.paste).joinedload(Paste.creator),
+            joinedload(PasteCollaborator.paste).joinedload(Paste.last_editor),
+        )
+        .where(PasteCollaborator.user_id == current_user.id)
+        .order_by(PasteCollaborator.joined_at.desc())
+    ).all()
+
+    bookmarks = session.scalars(
+        select(Bookmark)
+        .where(Bookmark.user_id == current_user.id)
+        .order_by(Bookmark.updated_at.desc(), Bookmark.created_at.desc())
+    ).all()
+
+    notes = session.scalars(
+        select(Note)
+        .where(Note.user_id == current_user.id)
+        .order_by(Note.updated_at.desc(), Note.created_at.desc())
+    ).all()
+
+    shared_pastes = [
+        membership.paste
+        for membership in shared_memberships
+        if membership.paste is not None and membership.paste.owner_id != current_user.id
+    ]
+
+    owned_items = _profile_items(request, owned_pastes, current_user, shared=False, language=language)
+    shared_items = _profile_items(request, shared_pastes, current_user, shared=True, language=language)
+    saved_items = [item for item in owned_items if item.get("preview_kind") != "link"]
+    short_link_items = [item for item in owned_items if item.get("preview_kind") == "link"]
+    bookmark_items = _bookmark_items(
+        request,
+        bookmarks,
+        normalized_tag,
+        normalized_search,
+        normalized_created,
+        normalized_month,
+    )
+    note_items = _note_items(
+        request,
+        notes,
+        normalized_tag,
+        normalized_search,
+        normalized_created,
+        normalized_month,
+    )
+
+    tab_items = {
+        "saved": saved_items,
+        "links": short_link_items,
+        "shared": shared_items,
+        "bookmarks": bookmark_items,
+        "notes": note_items,
+        "settings": [],
+    }
+    current_tab_items = tab_items[normalized_tab]
+    searched_items = _filter_profile_items_by_search(current_tab_items, normalized_search) if normalized_tab != "settings" else []
+    tag_scoped_items = _filter_profile_items_by_tag(searched_items, normalized_tag) if normalized_tab != "settings" else []
+    filtered_items = _filter_profile_items_by_created_date(tag_scoped_items, normalized_created) if normalized_tab != "settings" else []
+
+    bookmark_form_id = _coerce_identifier((bookmark_form or {}).get("id"))
+    note_form_id = _coerce_identifier((note_form or {}).get("id"))
+    bookmark_edit_target = None
+    note_edit_target = None
+
+    if normalized_tab == "bookmarks" and bookmark_edit_id is not None:
+        bookmark_edit_target = _get_bookmark_or_404(session, bookmark_edit_id, current_user)
+    elif bookmark_form_id is not None:
+        bookmark_edit_target = _get_bookmark_or_404(session, bookmark_form_id, current_user)
+
+    if normalized_tab == "notes" and note_edit_id is not None:
+        note_edit_target = _get_note_or_404(session, note_edit_id, current_user)
+    elif note_form_id is not None:
+        note_edit_target = _get_note_or_404(session, note_form_id, current_user)
+
+    bookmark_form_values = (
+        bookmark_form
+        if bookmark_form is not None
+        else _bookmark_form_state_from_model(bookmark_edit_target)
+    )
+    note_form_values = (
+        note_form
+        if note_form is not None
+        else _note_form_state_from_model(note_edit_target)
+    )
+    settings_form_values = settings_form or {
+        "preferred_language": normalize_language(current_user.preferred_language),
+        "theme_preference": normalize_theme_preference(current_user.theme_preference),
+    }
+    import_form_values = import_form or {"section": "all"}
+
+    active_section_label = {
+        "saved": tr("account.section_saved"),
+        "links": tr("account.section_links"),
+        "shared": tr("account.section_shared"),
+        "bookmarks": tr("account.section_bookmarks"),
+        "notes": tr("account.section_notes"),
+        "settings": tr("account.section_settings"),
+    }[normalized_tab]
+    create_action = {
+        "saved": {"label": tr("account.new_paste"), "url": "/"},
+        "links": {"label": tr("account.new_short_link"), "url": "/?mode=link"},
+        "shared": {"label": tr("account.new_paste"), "url": "/"},
+        "bookmarks": {"label": tr("account.new_bookmark"), "url": "#bookmark-form"},
+        "notes": {"label": tr("account.new_note"), "url": "#note-form"},
+        "settings": None,
+    }[normalized_tab]
+    profile_count = len(filtered_items)
+    search_placeholder = {
+        "saved": tr("account.search_saved"),
+        "links": tr("account.search_links"),
+        "shared": tr("account.search_shared"),
+        "bookmarks": tr("account.search_bookmarks"),
+        "notes": tr("account.search_notes"),
+        "settings": "",
+    }[normalized_tab]
+    sidebar_tag_items = (
+        _account_tag_summary(
+            request,
+            searched_items,
+            normalized_tab,
+            search_query=normalized_search,
+            active_tag=normalized_tag,
+            active_date=normalized_created,
+            active_month=normalized_month,
+        )
+        if normalized_tab != "settings"
+        else []
+    )
+    calendar_context = (
+        _account_calendar_context(
+            request,
+            tag_scoped_items,
+            normalized_tab,
+            search_query=normalized_search,
+            active_tag=normalized_tag,
+            active_date=normalized_created,
+            active_month=normalized_month,
+            language=language,
+        )
+        if normalized_tab != "settings"
+        else {"label": "", "weekdays": [], "weeks": [], "previous_url": "#", "next_url": "#"}
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="account.html",
+        context=_base_context(
+            request,
+            settings,
+            title="Profile",
+            current_user=current_user,
+            account_tab=normalized_tab,
+            active_tag=normalized_tag,
+            active_search=normalized_search,
+            active_created=_format_account_date(normalized_created),
+            active_month=_format_account_month(normalized_month),
+            active_section_label=active_section_label,
+            profile_count=profile_count,
+            profile_items=filtered_items if normalized_tab in {"saved", "links", "shared"} else [],
+            bookmark_items=filtered_items if normalized_tab == "bookmarks" else [],
+            note_items=filtered_items if normalized_tab == "notes" else [],
+            owned_count=len(saved_items),
+            short_link_count=len(short_link_items),
+            shared_count=len(shared_items),
+            bookmark_count=len(bookmark_items),
+            note_count=len(note_items),
+            saved_tab_url=_account_url(request, "saved", normalized_tag, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            links_tab_url=_account_url(request, "links", normalized_tag, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            shared_tab_url=_account_url(request, "shared", normalized_tag, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            bookmarks_tab_url=_account_url(request, "bookmarks", normalized_tag, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            notes_tab_url=_account_url(request, "notes", normalized_tag, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            settings_tab_url=_account_url(request, "settings"),
+            clear_tag_url=_account_url(request, normalized_tab, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            clear_search_url=_account_url(request, normalized_tab, normalized_tag, created=normalized_created, month=normalized_month),
+            clear_date_url=_account_url(request, normalized_tab, normalized_tag, search_query=normalized_search, month=normalized_month),
+            clear_all_filters_url=_account_url(request, normalized_tab, month=normalized_month),
+            account_message=_account_message(language, deleted, updated_tags, notice, imported_count),
+            create_item_label=create_action["label"] if create_action else "",
+            create_item_url=create_action["url"] if create_action else "",
+            show_create_item_button=create_action is not None,
+            show_account_view_toggle=normalized_tab != "settings",
+            search_placeholder=search_placeholder,
+            calendar_context=calendar_context,
+            sidebar_tag_items=sidebar_tag_items,
+            has_active_filters=bool(normalized_search or normalized_tag or normalized_created),
+            bookmark_dialog_open=bookmark_error is not None or bool(bookmark_form_values["id"]),
+            bookmark_form_values=bookmark_form_values,
+            bookmark_form_action=(
+                f"/account/bookmarks/{bookmark_form_values['id']}"
+                if bookmark_form_values["id"]
+                else "/account/bookmarks"
+            ),
+            bookmark_form_mode="edit" if bookmark_form_values["id"] else "create",
+            bookmark_cancel_url=_account_url(request, "bookmarks", normalized_tag, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            bookmark_error=bookmark_error,
+            note_form_values=note_form_values,
+            note_form_action=(
+                f"/account/notes/{note_form_values['id']}"
+                if note_form_values["id"]
+                else "/account/notes"
+            ),
+            note_form_mode="edit" if note_form_values["id"] else "create",
+            note_cancel_url=_account_url(request, "notes", normalized_tag, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            note_error=note_error,
+            settings_form_values=settings_form_values,
+            settings_error=settings_error,
+            import_form_values=import_form_values,
+            import_error=import_error,
+        ),
+    )
+
+
+def _bookmark_form_state(
+    *,
+    bookmark_id: int | None = None,
+    title: str = "",
+    url: str = "",
+    description: str = "",
+    tags: list[str] | None = None,
+) -> dict[str, str]:
+    return {
+        "id": str(bookmark_id or ""),
+        "title": title,
+        "url": url,
+        "description": description,
+        "tags": _format_tags_input(tags or []),
+    }
+
+
+def _bookmark_form_state_from_model(bookmark: Bookmark | None) -> dict[str, str]:
+    if bookmark is None:
+        return _bookmark_form_state()
+    return _bookmark_form_state(
+        bookmark_id=bookmark.id,
+        title=bookmark.title or "",
+        url=bookmark.url,
+        description=bookmark.description or "",
+        tags=_bookmark_tags(bookmark),
+    )
+
+
+def _note_form_state(
+    *,
+    note_id: int | None = None,
+    title: str = "",
+    content: str = "",
+    tags: list[str] | None = None,
+) -> dict[str, str]:
+    return {
+        "id": str(note_id or ""),
+        "title": title,
+        "content": content,
+        "tags": _format_tags_input(tags or []),
+    }
+
+
+def _note_form_state_from_model(note: Note | None) -> dict[str, str]:
+    if note is None:
+        return _note_form_state()
+    return _note_form_state(
+        note_id=note.id,
+        title=note.title or "",
+        content=note.content,
+        tags=_note_tags(note),
+    )
+
+
+def _normalize_profile_transfer_section(value: str | None) -> str | None:
+    candidate = (value or "").strip().lower()
+    return candidate if candidate in PROFILE_EXPORT_SECTIONS else None
+
+
+def _serialize_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat()
+
+
+def _parse_archive_datetime(value: object) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _normalize_import_tags_from_payload(value: object) -> list[str]:
+    if isinstance(value, list):
+        return _normalize_tags(" ".join(str(item) for item in value))
+    if isinstance(value, str):
+        return _normalize_tags(value)
+    return []
+
+
+def _export_revision_data(revision: PasteRevision) -> dict[str, object]:
+    return {
+        "revision_number": revision.revision_number,
+        "event": revision.event,
+        "title": revision.title,
+        "content": revision.content,
+        "syntax": revision.syntax,
+        "view_mode": revision.view_mode,
+        "editor_username": revision.editor.username if revision.editor else None,
+        "created_at": _serialize_datetime(revision.created_at),
+    }
+
+
+def _export_paste_data(paste: Paste) -> dict[str, object]:
+    revisions = sorted(paste.revisions, key=lambda item: item.revision_number)
+    return {
+        "slug": paste.slug,
+        "title": paste.title,
+        "content": paste.content,
+        "syntax": paste.syntax,
+        "view_mode": paste.view_mode,
+        "is_url": paste.is_url,
+        "tags": _paste_tags(paste),
+        "creator_username": paste.creator.username if paste.creator else None,
+        "last_editor_username": paste.last_editor.username if paste.last_editor else None,
+        "created_at": _serialize_datetime(paste.created_at),
+        "updated_at": _serialize_datetime(paste.updated_at),
+        "revisions": [_export_revision_data(revision) for revision in revisions],
+    }
+
+
+def _export_bookmark_data(bookmark: Bookmark) -> dict[str, object]:
+    return {
+        "title": bookmark.title,
+        "url": bookmark.url,
+        "description": bookmark.description,
+        "tags": _bookmark_tags(bookmark),
+        "created_at": _serialize_datetime(bookmark.created_at),
+        "updated_at": _serialize_datetime(bookmark.updated_at),
+    }
+
+
+def _export_note_data(note: Note) -> dict[str, object]:
+    return {
+        "title": note.title,
+        "content": note.content,
+        "tags": _note_tags(note),
+        "created_at": _serialize_datetime(note.created_at),
+        "updated_at": _serialize_datetime(note.updated_at),
+    }
+
+
+def _build_profile_export_payload(session: Session, current_user: User, section: str) -> dict[str, object]:
+    owned_pastes = session.scalars(
+        select(Paste)
+        .options(joinedload(Paste.creator), joinedload(Paste.last_editor), selectinload(Paste.revisions).joinedload(PasteRevision.editor))
+        .where(Paste.owner_id == current_user.id)
+        .order_by(Paste.updated_at.desc(), Paste.created_at.desc())
+    ).all()
+    shared_memberships = session.scalars(
+        select(PasteCollaborator)
+        .options(
+            joinedload(PasteCollaborator.paste).joinedload(Paste.creator),
+            joinedload(PasteCollaborator.paste).joinedload(Paste.last_editor),
+            joinedload(PasteCollaborator.paste).selectinload(Paste.revisions).joinedload(PasteRevision.editor),
+        )
+        .where(PasteCollaborator.user_id == current_user.id)
+        .order_by(PasteCollaborator.joined_at.desc())
+    ).all()
+    shared_pastes = [
+        membership.paste
+        for membership in shared_memberships
+        if membership.paste is not None and membership.paste.owner_id != current_user.id
+    ]
+    bookmarks = session.scalars(
+        select(Bookmark)
+        .where(Bookmark.user_id == current_user.id)
+        .order_by(Bookmark.updated_at.desc(), Bookmark.created_at.desc())
+    ).all()
+    notes = session.scalars(
+        select(Note)
+        .where(Note.user_id == current_user.id)
+        .order_by(Note.updated_at.desc(), Note.created_at.desc())
+    ).all()
+
+    saved_pastes = [paste for paste in owned_pastes if not paste.is_url and paste.view_mode != "link"]
+    link_pastes = [paste for paste in owned_pastes if paste.is_url or paste.view_mode == "link"]
+    sections = {
+        "saved": [_export_paste_data(paste) for paste in saved_pastes],
+        "shared": [_export_paste_data(paste) for paste in shared_pastes],
+        "bookmarks": [_export_bookmark_data(bookmark) for bookmark in bookmarks],
+        "notes": [_export_note_data(note) for note in notes],
+        "links": [_export_paste_data(paste) for paste in link_pastes],
+    }
+    exported_sections = sections if section == "all" else {section: sections.get(section, [])}
+    return {
+        "app": "rivulet-bin",
+        "version": 1,
+        "section": section,
+        "exported_at": _serialize_datetime(datetime.now(timezone.utc)),
+        "user": {
+            "username": current_user.username,
+            "preferred_language": normalize_language(current_user.preferred_language),
+            "theme_preference": normalize_theme_preference(current_user.theme_preference),
+        },
+        "sections": exported_sections,
+    }
+
+
+def _restore_paste_revisions(session: Session, paste: Paste, revisions_payload: object, current_user: User) -> None:
+    if not isinstance(revisions_payload, list):
+        _record_revision(session, paste, current_user, event="created")
+        return
+
+    seen_numbers: set[int] = set()
+    restored_any = False
+    for raw_revision in sorted(
+        (item for item in revisions_payload if isinstance(item, dict)),
+        key=lambda item: int(item.get("revision_number", 0) or 0),
+    ):
+        try:
+            revision_number = int(raw_revision.get("revision_number", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if revision_number <= 0 or revision_number in seen_numbers:
+            continue
+
+        seen_numbers.add(revision_number)
+        revision_created_at = _parse_archive_datetime(raw_revision.get("created_at")) or paste.created_at
+        editor_username = str(raw_revision.get("editor_username") or "").strip().lower()
+        session.add(
+            PasteRevision(
+                paste_id=paste.id,
+                revision_number=revision_number,
+                event=str(raw_revision.get("event") or "saved")[:24],
+                title=(str(raw_revision.get("title") or "").strip()[:120] or None),
+                content=str(raw_revision.get("content") or paste.content),
+                syntax=(
+                    str(raw_revision.get("syntax") or paste.syntax).strip().lower()
+                    if str(raw_revision.get("syntax") or paste.syntax).strip().lower() in VALID_SYNTAX_VALUES
+                    else paste.syntax
+                ),
+                view_mode=(
+                    str(raw_revision.get("view_mode") or paste.view_mode).strip().lower()
+                    if str(raw_revision.get("view_mode") or paste.view_mode).strip().lower() in VALID_MODE_VALUES
+                    else paste.view_mode
+                ),
+                editor_id=current_user.id if editor_username == current_user.username else None,
+                created_at=revision_created_at,
+            )
+        )
+        restored_any = True
+
+    if not restored_any:
+        _record_revision(session, paste, current_user, event="created")
+
+
+def _import_paste_items(
+    session: Session,
+    settings: Settings,
+    current_user: User,
+    items_payload: object,
+    *,
+    shared: bool,
+) -> int:
+    if not isinstance(items_payload, list):
+        return 0
+
+    imported = 0
+    for raw_item in items_payload:
+        if not isinstance(raw_item, dict):
+            continue
+
+        content = str(raw_item.get("content") or "")
+        if not content.strip():
+            continue
+
+        desired_slug = normalize_slug(str(raw_item.get("slug") or ""))
+        claimed_slug = _claim_slug(session, settings, desired_slug) if desired_slug else None
+        slug = claimed_slug or _claim_slug(session, settings, "")
+        if slug is None:
+            continue
+
+        syntax = str(raw_item.get("syntax") or "auto").strip().lower()
+        if syntax not in VALID_SYNTAX_VALUES:
+            syntax = "auto"
+        view_mode = str(raw_item.get("view_mode") or "code").strip().lower()
+        if view_mode not in VALID_MODE_VALUES:
+            view_mode = "link" if raw_item.get("is_url") else "code"
+
+        created_at = _parse_archive_datetime(raw_item.get("created_at")) or datetime.now(timezone.utc)
+        updated_at = _parse_archive_datetime(raw_item.get("updated_at")) or created_at
+        paste = Paste(
+            slug=slug,
+            title=(str(raw_item.get("title") or "").strip()[:120] or None),
+            tags_json=_serialize_tags(_normalize_import_tags_from_payload(raw_item.get("tags"))),
+            content=content,
+            syntax=syntax,
+            view_mode=view_mode,
+            is_url=bool(raw_item.get("is_url")) or view_mode == "link",
+            edit_key=generate_edit_key(),
+            owner_id=None if shared else current_user.id,
+            creator_id=current_user.id,
+            last_editor_id=current_user.id,
+            created_at=created_at,
+            updated_at=updated_at,
+        )
+        session.add(paste)
+        session.flush()
+
+        if shared:
+            session.add(PasteCollaborator(paste_id=paste.id, user_id=current_user.id))
+
+        _restore_paste_revisions(session, paste, raw_item.get("revisions"), current_user)
+        imported += 1
+
+    return imported
+
+
+def _import_bookmark_items(session: Session, current_user: User, items_payload: object) -> int:
+    if not isinstance(items_payload, list):
+        return 0
+
+    imported = 0
+    for raw_item in items_payload:
+        if not isinstance(raw_item, dict):
+            continue
+
+        normalized_url = _normalize_bookmark_url(str(raw_item.get("url") or ""))
+        if normalized_url is None:
+            continue
+
+        created_at = _parse_archive_datetime(raw_item.get("created_at")) or datetime.now(timezone.utc)
+        updated_at = _parse_archive_datetime(raw_item.get("updated_at")) or created_at
+        session.add(
+            Bookmark(
+                user_id=current_user.id,
+                title=(str(raw_item.get("title") or "").strip()[:120] or None),
+                url=normalized_url,
+                description=(str(raw_item.get("description") or "").strip()[:4000] or None),
+                tags_json=_serialize_tags(_normalize_import_tags_from_payload(raw_item.get("tags"))),
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+        )
+        imported += 1
+
+    return imported
+
+
+def _import_note_items(session: Session, current_user: User, items_payload: object) -> int:
+    if not isinstance(items_payload, list):
+        return 0
+
+    imported = 0
+    for raw_item in items_payload:
+        if not isinstance(raw_item, dict):
+            continue
+
+        content = str(raw_item.get("content") or "")
+        if not content.strip():
+            continue
+
+        created_at = _parse_archive_datetime(raw_item.get("created_at")) or datetime.now(timezone.utc)
+        updated_at = _parse_archive_datetime(raw_item.get("updated_at")) or created_at
+        session.add(
+            Note(
+                user_id=current_user.id,
+                title=(str(raw_item.get("title") or "").strip()[:120] or None),
+                content=content,
+                tags_json=_serialize_tags(_normalize_import_tags_from_payload(raw_item.get("tags"))),
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+        )
+        imported += 1
+
+    return imported
+
+
+def _import_profile_payload(
+    session: Session,
+    settings: Settings,
+    current_user: User,
+    payload: object,
+    selected_section: str,
+) -> int:
+    if not isinstance(payload, dict):
+        raise ValueError(translate(normalize_language(current_user.preferred_language), "settings.error_file_shape"))
+
+    sections_payload = payload.get("sections")
+    if not isinstance(sections_payload, dict):
+        raise ValueError(translate(normalize_language(current_user.preferred_language), "settings.error_file_shape"))
+
+    available_sections = (
+        [section for section in ("saved", "shared", "bookmarks", "notes", "links") if section in sections_payload]
+        if selected_section == "all"
+        else [selected_section]
+    )
+
+    imported = 0
+    for section_name in available_sections:
+        raw_section = sections_payload.get(section_name)
+        if section_name == "saved":
+            imported += _import_paste_items(session, settings, current_user, raw_section, shared=False)
+        elif section_name == "shared":
+            imported += _import_paste_items(session, settings, current_user, raw_section, shared=True)
+        elif section_name == "bookmarks":
+            imported += _import_bookmark_items(session, current_user, raw_section)
+        elif section_name == "notes":
+            imported += _import_note_items(session, current_user, raw_section)
+        elif section_name == "links":
+            imported += _import_paste_items(session, settings, current_user, raw_section, shared=False)
+
+    if selected_section == "all":
+        user_payload = payload.get("user")
+        if isinstance(user_payload, dict):
+            preferred_language = str(user_payload.get("preferred_language") or "").strip().lower()
+            theme_preference = str(user_payload.get("theme_preference") or "").strip().lower()
+            if preferred_language in SUPPORTED_LANGUAGES:
+                current_user.preferred_language = preferred_language
+            if theme_preference in SUPPORTED_THEME_PREFERENCES:
+                current_user.theme_preference = theme_preference
+            session.add(current_user)
+
+    session.commit()
+    return imported
+
+
+def _build_account_redirect_url(
+    request: Request,
+    tab: str,
+    *,
+    notice: str | None = None,
+    tag: str | None = None,
+    search_query: str | None = None,
+    created: str | date | None = None,
+    month: str | date | None = None,
+    bookmark_edit: int | None = None,
+    note_edit: int | None = None,
+    deleted: str | None = None,
+    updated_tags: str | None = None,
+) -> str:
+    url = request.url_for("account").include_query_params(tab=_normalize_account_tab(tab))
+    if tag:
+        url = url.include_query_params(tag=tag)
+    normalized_search = _normalize_account_search(search_query)
+    if normalized_search:
+        url = url.include_query_params(q=normalized_search)
+    normalized_created = _normalize_account_date(created)
+    if normalized_created is not None:
+        url = url.include_query_params(created=normalized_created.isoformat())
+    normalized_month = _normalize_account_month(month, fallback=normalized_created)
+    if month is not None:
+        url = url.include_query_params(month=normalized_month.strftime("%Y-%m"))
+    if notice in ACCOUNT_NOTICE_KEYS:
+        url = url.include_query_params(notice=notice)
+    if bookmark_edit is not None:
+        url = url.include_query_params(bookmark_edit=bookmark_edit)
+    if note_edit is not None:
+        url = url.include_query_params(note_edit=note_edit)
+    deleted_slug = normalize_slug(deleted or "")
+    if deleted_slug:
+        url = url.include_query_params(deleted=deleted_slug)
+    updated_slug = normalize_slug(updated_tags or "")
+    if updated_slug:
+        url = url.include_query_params(updated_tags=updated_slug)
+    return str(url)
+
+
 def _profile_items(
     request: Request,
     pastes: list[Paste],
     current_user: User | None,
     *,
     shared: bool,
+    language: str,
 ) -> list[dict[str, object]]:
     origin = str(request.base_url).rstrip("/")
     items: list[dict[str, object]] = []
@@ -1154,6 +2622,8 @@ def _profile_items(
             {
                 "paste": paste,
                 "tags": _paste_tags(paste),
+                "created_at": paste.created_at,
+                "created_date": _item_created_date(paste.created_at),
                 "public_url": origin + request.url_for("view_paste", slug=paste.slug).path,
                 "raw_url": origin + request.url_for("raw_paste", slug=paste.slug).path,
                 "edit_url": request.url_for("edit_paste_form", slug=paste.slug).path,
@@ -1161,13 +2631,103 @@ def _profile_items(
                 "changes_url": request.url_for("revisions_page", slug=paste.slug).path,
                 "preview_kind": _profile_preview_kind(paste, resolved_syntax),
                 "preview_text": _profile_preview_text(paste),
-                "preview_label": _profile_preview_label(paste, resolved_syntax),
-                "display_syntax": _profile_syntax_label(paste, resolved_syntax),
-                "creator_label": _profile_user_label(paste.creator),
-                "last_editor_label": _profile_user_label(paste.last_editor),
+                "preview_label": _profile_preview_label(paste, resolved_syntax, language),
+                "display_syntax": _profile_syntax_label(paste, resolved_syntax, language),
+                "creator_label": _profile_user_label(paste.creator, language),
+                "last_editor_label": _profile_user_label(paste.last_editor, language),
                 "is_shared": shared,
                 "can_manage_tags": _can_user_edit_paste(paste, current_user),
-                "can_delete": _is_owned_by_user(paste, current_user),
+                "can_delete": _can_user_delete_paste(paste, current_user),
+                "search_text": _search_blob(
+                    paste.title,
+                    paste.slug,
+                    paste.content[:2000],
+                    " ".join(_paste_tags(paste)),
+                    paste.creator.username if paste.creator else "",
+                    paste.last_editor.username if paste.last_editor else "",
+                ),
+            }
+        )
+    return items
+
+
+def _bookmark_items(
+    request: Request,
+    bookmarks: list[Bookmark],
+    active_tag: str | None = None,
+    active_search: str | None = None,
+    active_created: date | None = None,
+    active_month: date | None = None,
+) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for bookmark in bookmarks:
+        host = _bookmark_host(bookmark.url)
+        items.append(
+            {
+                "bookmark": bookmark,
+                "tags": _bookmark_tags(bookmark),
+                "created_at": bookmark.created_at,
+                "created_date": _item_created_date(bookmark.created_at),
+                "display_title": _bookmark_display_title(bookmark),
+                "display_url": _truncate_text(bookmark.url, 88),
+                "host": host,
+                "preview_text": _bookmark_preview_text(bookmark),
+                "search_text": _search_blob(
+                    bookmark.title,
+                    bookmark.url,
+                    bookmark.description,
+                    " ".join(_bookmark_tags(bookmark)),
+                ),
+                "edit_url": _build_account_redirect_url(
+                    request,
+                    "bookmarks",
+                    tag=active_tag,
+                    search_query=active_search,
+                    created=active_created,
+                    month=active_month,
+                    bookmark_edit=bookmark.id,
+                ),
+            }
+        )
+    return items
+
+
+def _note_items(
+    request: Request,
+    notes: list[Note],
+    active_tag: str | None = None,
+    active_search: str | None = None,
+    active_created: date | None = None,
+    active_month: date | None = None,
+) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for note in notes:
+        items.append(
+            {
+                "note": note,
+                "tags": _note_tags(note),
+                "created_at": note.created_at,
+                "created_date": _item_created_date(note.created_at),
+                "display_title": _note_display_title(note),
+                "preview_text": _excerpt_text(note.content),
+                "preview_html": _note_preview_html(note.content),
+                "content_html": _note_content_html(note.content),
+                "line_count": max(1, note.content.count("\n") + 1),
+                "char_count": len(note.content),
+                "search_text": _search_blob(
+                    note.title,
+                    note.content[:2000],
+                    " ".join(_note_tags(note)),
+                ),
+                "edit_url": _build_account_redirect_url(
+                    request,
+                    "notes",
+                    tag=active_tag,
+                    search_query=active_search,
+                    created=active_created,
+                    month=active_month,
+                    note_edit=note.id,
+                ),
             }
         )
     return items
@@ -1191,22 +2751,18 @@ def _profile_preview_text(paste: Paste) -> str:
     if paste.is_url or paste.view_mode == "link":
         return content
 
-    lines = content.split("\n")
-    excerpt = "\n".join(lines[:8]).strip()
-    if len(lines) > 8 or len(excerpt) > 340:
-        excerpt = excerpt[:340].rstrip() + "..."
-    return excerpt
+    return _excerpt_text(content)
 
 
-def _profile_preview_label(paste: Paste, resolved_syntax: str) -> str:
+def _profile_preview_label(paste: Paste, resolved_syntax: str, language: str = "en") -> str:
     if paste.is_url or paste.view_mode == "link":
-        return "Short link"
-    return _profile_syntax_label(paste, resolved_syntax)
+        return translate(language, "account.shortened_link")
+    return _profile_syntax_label(paste, resolved_syntax, language)
 
 
-def _profile_syntax_label(paste: Paste, resolved_syntax: str) -> str:
+def _profile_syntax_label(paste: Paste, resolved_syntax: str, language: str = "en") -> str:
     if paste.is_url or paste.view_mode == "link":
-        return "LINK"
+        return translate(language, "mode.link_short").upper()
     if paste.view_mode == "markdown":
         return "MARKDOWN"
     return resolved_syntax.upper()
@@ -1220,9 +2776,234 @@ def _profile_resolved_syntax(paste: Paste) -> str:
     return resolved_syntax if resolved_syntax in VALID_SYNTAX_VALUES else "text"
 
 
-def _profile_user_label(user: User | None) -> str:
+def _bookmark_tags(bookmark: Bookmark) -> list[str]:
+    return _deserialize_tags(getattr(bookmark, "tags_json", "[]"))
+
+
+def _note_tags(note: Note) -> list[str]:
+    return _deserialize_tags(getattr(note, "tags_json", "[]"))
+
+
+def _truncate_text(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    return value[: max_length - 3].rstrip() + "..."
+
+
+def _excerpt_text(content: str, *, max_lines: int = 8, max_chars: int = 340) -> str:
+    normalized = content.replace("\r\n", "\n").strip()
+    if not normalized:
+        return "No content"
+
+    lines = normalized.split("\n")
+    excerpt = "\n".join(lines[:max_lines]).strip()
+    if len(lines) > max_lines or len(excerpt) > max_chars:
+        excerpt = excerpt[:max_chars].rstrip() + "..."
+    return excerpt
+
+
+def _note_content_html(content: str) -> Markup:
+    return _note_rich_html(content)
+
+
+def _note_preview_html(content: str) -> Markup:
+    return _note_rich_html(content, max_lines=6, max_chars=320)
+
+
+def _note_rich_html(
+    content: str,
+    *,
+    max_lines: int | None = None,
+    max_chars: int | None = None,
+) -> Markup:
+    if max_lines is not None or max_chars is not None:
+        normalized = _excerpt_text(
+            content,
+            max_lines=max_lines or 8,
+            max_chars=max_chars or 340,
+        )
+    else:
+        normalized = content.replace("\r\n", "\n").strip() or "No content"
+
+    parts: list[str] = []
+    last_index = 0
+
+    for match in NOTE_INLINE_TOKEN_RE.finditer(normalized):
+        start, end = match.span()
+        token = match.group(0)
+        if start > last_index:
+            parts.append(str(escape(normalized[last_index:start])))
+
+        if token.startswith(("http://", "https://")):
+            link_value, trailing = _split_note_link_trailing_punctuation(token)
+            escaped_link = escape(link_value)
+            parts.append(
+                f'<a href="{escaped_link}" target="_blank" rel="noreferrer">{escaped_link}</a>'
+            )
+            if trailing:
+                parts.append(str(escape(trailing)))
+        else:
+            parts.append(f'<span class="note-inline-command">{escape(token)}</span>')
+
+        last_index = end
+
+    if last_index < len(normalized):
+        parts.append(str(escape(normalized[last_index:])))
+
+    return Markup("".join(parts))
+
+
+def _split_note_link_trailing_punctuation(value: str) -> tuple[str, str]:
+    trimmed = value
+    trailing_chars: list[str] = []
+    matching_brackets = {")": "(", "]": "[", "}": "{"}
+
+    while trimmed and trimmed[-1] in ".,;:!?":
+        trailing_chars.append(trimmed[-1])
+        trimmed = trimmed[:-1]
+
+    while trimmed and trimmed[-1] in matching_brackets:
+        closing = trimmed[-1]
+        opening = matching_brackets[closing]
+        if trimmed.count(closing) <= trimmed.count(opening):
+            break
+        trailing_chars.append(closing)
+        trimmed = trimmed[:-1]
+
+    return trimmed or value, "".join(reversed(trailing_chars))
+
+
+def _resolve_short_link_title(title: str | None, url: str, is_url: bool) -> str | None:
+    if title or not is_url:
+        return title
+    return _short_link_site_title(url)
+
+
+def _short_link_site_title(url: str) -> str | None:
+    parsed = urlparse(url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+
+    page_title = _fetch_short_link_page_title(url, parsed)
+    if page_title:
+        return page_title[:120]
+
+    host = parsed.netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host[:120] or None
+
+
+def _fetch_short_link_page_title(url: str, parsed_url) -> str | None:
+    if not _is_safe_short_link_target(parsed_url):
+        return None
+
+    try:
+        request = UrlRequest(
+            url,
+            headers={
+                "User-Agent": "RivuletBin/1.0 (+https://localhost)",
+                "Accept": "text/html,application/xhtml+xml",
+            },
+        )
+        with urlopen(request, timeout=3) as response:
+            content_type = response.headers.get_content_type()
+            if content_type not in {"text/html", "application/xhtml+xml"}:
+                return None
+            charset = response.headers.get_content_charset() or "utf-8"
+            snippet = response.read(65536).decode(charset, errors="ignore")
+    except Exception:
+        return None
+
+    parser = _HTMLTitleExtractor()
+    parser.feed(snippet)
+    return parser.title
+
+
+def _is_safe_short_link_target(parsed_url) -> bool:
+    hostname = parsed_url.hostname
+    if not hostname:
+        return False
+
+    try:
+        resolved = socket.getaddrinfo(
+            hostname,
+            parsed_url.port or (443 if parsed_url.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+    except OSError:
+        return False
+
+    for entry in resolved:
+        raw_ip = entry[4][0]
+        try:
+            address = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            return False
+        if (
+            address.is_private
+            or address.is_loopback
+            or address.is_link_local
+            or address.is_multicast
+            or address.is_reserved
+            or address.is_unspecified
+        ):
+            return False
+    return True
+
+
+class _HTMLTitleExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._inside_title = False
+        self._chunks: list[str] = []
+
+    @property
+    def title(self) -> str | None:
+        text = " ".join(chunk.strip() for chunk in self._chunks if chunk.strip())
+        normalized = " ".join(text.split())
+        return normalized or None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() == "title" and not self._chunks:
+            self._inside_title = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "title":
+            self._inside_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._inside_title:
+            self._chunks.append(data)
+
+
+def _bookmark_host(url: str) -> str:
+    parsed = urlparse(url.strip())
+    return parsed.netloc or parsed.path or url
+
+
+def _bookmark_display_title(bookmark: Bookmark) -> str:
+    return bookmark.title or _bookmark_host(bookmark.url)
+
+
+def _bookmark_preview_text(bookmark: Bookmark) -> str:
+    description = (bookmark.description or "").strip()
+    return _truncate_text(description or bookmark.url, 260)
+
+
+def _note_display_title(note: Note) -> str:
+    if note.title:
+        return note.title
+
+    first_line = next((line.strip() for line in note.content.splitlines() if line.strip()), "")
+    if not first_line:
+        return "Untitled note"
+    return _truncate_text(first_line, 72)
+
+
+def _profile_user_label(user: User | None, language: str = "en") -> str:
     if user is None:
-        return "Guest"
+        return translate(language, "common.guest")
     return f"@{user.username}"
 
 
@@ -1231,25 +3012,207 @@ def _revision_event_label(event: str) -> str:
 
 
 def _normalize_account_tab(tab: str | None) -> str:
-    return "shared" if tab == "shared" else "saved"
+    if tab in {"links", "shared", "bookmarks", "notes", "settings"}:
+        return tab
+    return "saved"
 
 
-def _account_url(request: Request, tab: str, tag: str | None = None) -> str:
-    url = request.url_for("account").include_query_params(tab=_normalize_account_tab(tab))
-    if tag:
-        url = url.include_query_params(tag=tag)
-    return str(url)
+def _account_url(
+    request: Request,
+    tab: str,
+    tag: str | None = None,
+    *,
+    search_query: str | None = None,
+    created: str | date | None = None,
+    month: str | date | None = None,
+) -> str:
+    return _build_account_redirect_url(
+        request,
+        tab,
+        tag=tag,
+        search_query=search_query,
+        created=created,
+        month=month,
+    )
 
 
-def _account_message(deleted: str | None, updated_tags: str | None = None) -> str | None:
+def _account_message(
+    language: str,
+    deleted: str | None,
+    updated_tags: str | None = None,
+    notice: str | None = None,
+    imported_count: int | None = None,
+) -> str | None:
     updated_slug = normalize_slug(updated_tags or "")
     if updated_slug:
-        return f"Tags updated for {updated_slug}."
+        return translate(language, "notice.tags_updated", slug=updated_slug)
+
+    if notice == "import_completed":
+        return translate(language, "notice.import_completed", count=imported_count or 0)
+
+    notice_key = ACCOUNT_NOTICE_KEYS.get(notice or "")
+    if notice_key:
+        return translate(language, notice_key)
 
     deleted_slug = normalize_slug(deleted or "")
     if not deleted_slug:
         return None
-    return f"Paste {deleted_slug} deleted."
+    return translate(language, "notice.paste_deleted", slug=deleted_slug)
+
+
+def _coerce_identifier(value: object) -> int | None:
+    if value in {None, ""}:
+        return None
+    try:
+        coerced = int(str(value))
+    except (TypeError, ValueError):
+        return None
+    return coerced if coerced > 0 else None
+
+
+def _normalize_bookmark_url(value: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned or any(symbol.isspace() for symbol in cleaned):
+        return None
+
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", cleaned):
+        cleaned = f"https://{cleaned}"
+
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return parsed.geturl()
+
+
+def _search_blob(*parts: object) -> str:
+    values = []
+    for part in parts:
+        if part is None:
+            continue
+        text = str(part).replace("\r\n", "\n").strip()
+        if text:
+            values.append(text.lower())
+    return "\n".join(values)
+
+
+def _item_created_date(value: datetime | None) -> date | None:
+    if value is None:
+        return None
+    return value.date()
+
+
+def _account_tag_summary(
+    request: Request,
+    items: list[dict[str, object]],
+    tab: str,
+    *,
+    search_query: str,
+    active_tag: str | None,
+    active_date: date | None,
+    active_month: date,
+) -> list[dict[str, object]]:
+    counts: Counter[str] = Counter()
+    for item in items:
+        for tag in item.get("tags", []):
+            counts[str(tag)] += 1
+
+    return [
+        {
+            "tag": tag,
+            "count": count,
+            "url": _build_account_redirect_url(
+                request,
+                tab,
+                tag=tag,
+                search_query=search_query,
+                created=active_date,
+                month=active_month,
+            ),
+            "is_active": active_tag == tag,
+        }
+        for tag, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _account_calendar_context(
+    request: Request,
+    items: list[dict[str, object]],
+    tab: str,
+    *,
+    search_query: str,
+    active_tag: str | None,
+    active_date: date | None,
+    active_month: date,
+    language: str,
+) -> dict[str, object]:
+    month_calendar = calendar.Calendar(firstweekday=0)
+    item_counts: Counter[date] = Counter()
+    for item in items:
+        created_date = item.get("created_date")
+        if isinstance(created_date, date):
+            item_counts[created_date] += 1
+
+    weeks: list[list[dict[str, object]]] = []
+    for week in month_calendar.monthdatescalendar(active_month.year, active_month.month):
+        week_entries: list[dict[str, object]] = []
+        for day in week:
+            in_current_month = day.month == active_month.month
+            count = item_counts.get(day, 0)
+            week_entries.append(
+                {
+                    "label": day.day,
+                    "date_value": day.isoformat(),
+                    "is_current_month": in_current_month,
+                    "is_selected": active_date == day,
+                    "has_items": count > 0,
+                    "count": count,
+                    "url": _build_account_redirect_url(
+                        request,
+                        tab,
+                        tag=active_tag,
+                        search_query=search_query,
+                        created=day if in_current_month else None,
+                        month=day if in_current_month else day.replace(day=1),
+                    ),
+                }
+            )
+        weeks.append(week_entries)
+
+    previous_month = _shift_account_month(active_month, -1)
+    next_month = _shift_account_month(active_month, 1)
+    return {
+        "label": calendar_label(active_month, language),
+        "weekdays": calendar_weekdays(language),
+        "weeks": weeks,
+        "previous_url": _build_account_redirect_url(
+            request,
+            tab,
+            tag=active_tag,
+            search_query=search_query,
+            month=previous_month,
+        ),
+        "next_url": _build_account_redirect_url(
+            request,
+            tab,
+            tag=active_tag,
+            search_query=search_query,
+            month=next_month,
+        ),
+    }
+
+
+def _get_bookmark_or_404(session: Session, bookmark_id: int, current_user: User) -> Bookmark:
+    bookmark = session.get(Bookmark, bookmark_id)
+    if bookmark is None or bookmark.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    return bookmark
+
+
+def _get_note_or_404(session: Session, note_id: int, current_user: User) -> Note:
+    note = session.get(Note, note_id)
+    if note is None or note.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
 
 
 def _is_owned_by_user(paste: Paste, user: User | None) -> bool:
@@ -1264,6 +3227,12 @@ def _is_collaborator_for_user(paste: Paste, user: User | None) -> bool:
 
 def _can_user_edit_paste(paste: Paste, user: User | None) -> bool:
     return _is_owned_by_user(paste, user) or _is_collaborator_for_user(paste, user)
+
+
+def _can_user_delete_paste(paste: Paste, user: User | None) -> bool:
+    if _is_owned_by_user(paste, user):
+        return True
+    return paste.owner_id is None and _is_collaborator_for_user(paste, user)
 
 
 def _changes_url(request: Request, paste: Paste, current_user: User | None, key: str | None = None) -> str:

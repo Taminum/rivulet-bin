@@ -2,8 +2,8 @@
     <button type="button" class="history-backdrop" data-history-close aria-label="Close history"></button>
     <aside class="history-panel">
         <div class="history-panel-header">
-            <strong>Recent</strong>
-            <button type="button" class="history-close" data-history-close aria-label="Close history">Close</button>
+            <strong>{{ t("site.recent") }}</strong>
+            <button type="button" class="history-close" data-history-close aria-label="{{ t('site.close') }}">{{ t("site.close") }}</button>
         </div>
 
         {% if history_items %}
@@ -20,13 +20,13 @@
                         {{ item.paste.updated_at.strftime('%Y-%m-%d %H:%M') }}
                         {% endif %}
                     </span>
-                    <a class="history-link" href="{{ item.edit_url }}" data-history-close>Edit</a>
+                    <a class="history-link" href="{{ item.edit_url }}" data-history-close>{{ t("common.edit") }}</a>
                 </div>
             </article>
             {% endfor %}
         </div>
         {% else %}
-        <p class="history-empty">No saved files yet.</p>
+        <p class="history-empty">{{ t("history.empty") }}</p>
         {% endif %}
     </aside>
 </div>
