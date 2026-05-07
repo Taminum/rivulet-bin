@@ -1,0 +1,154 @@
+name: prismarr-stack
+
+services:
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Asia/Yekaterinburg}
+      WEBUI_PORT: 8080
+      TORRENTING_PORT: 6881
+    volumes:
+      - qbittorrent_config:/config
+      - ${DOWNLOADS_PATH:-./data/downloads}:/data/downloads
+    ports:
+      - "${QBIT_WEBUI_PORT:-8080}:8080"
+      - "${QBIT_TORRENT_PORT:-6881}:6881"
+      - "${QBIT_TORRENT_PORT:-6881}:6881/udp"
+    networks:
+      - media
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Asia/Yekaterinburg}
+    volumes:
+      - prowlarr_config:/config
+    ports:
+      - "${PROWLARR_PORT:-9696}:9696"
+    networks:
+      - media
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    depends_on:
+      - prowlarr
+      - qbittorrent
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Asia/Yekaterinburg}
+    volumes:
+      - sonarr_config:/config
+      - ${TV_PATH:-./data/media/tv}:/data/tv
+      - ${DOWNLOADS_PATH:-./data/downloads}:/data/downloads
+    ports:
+      - "${SONARR_PORT:-8989}:8989"
+    networks:
+      - media
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    depends_on:
+      - prowlarr
+      - qbittorrent
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Asia/Yekaterinburg}
+    volumes:
+      - radarr_config:/config
+      - ${MOVIES_PATH:-./data/media/movies}:/data/movies
+      - ${DOWNLOADS_PATH:-./data/downloads}:/data/downloads
+    ports:
+      - "${RADARR_PORT:-7878}:7878"
+    networks:
+      - media
+    restart: unless-stopped
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      TZ: ${TZ:-Asia/Yekaterinburg}
+    volumes:
+      - jellyfin_config:/config
+      - jellyfin_cache:/cache
+      - ${MOVIES_PATH:-./data/media/movies}:/media/movies:ro
+      - ${TV_PATH:-./data/media/tv}:/media/tv:ro
+    ports:
+      - "${JELLYFIN_PORT:-8096}:8096"
+      - "7359:7359/udp"
+      - "1900:1900/udp"
+    networks:
+      - media
+    restart: unless-stopped
+
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    depends_on:
+      - jellyfin
+      - sonarr
+      - radarr
+    environment:
+      TZ: ${TZ:-Asia/Yekaterinburg}
+      PORT: 5055
+      LOG_LEVEL: info
+    volumes:
+      - jellyseerr_config:/app/config
+    ports:
+      - "${JELLYSEERR_PORT:-5055}:5055"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5055/api/v1/status || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - media
+    restart: unless-stopped
+
+  prismarr:
+    image: shoshuo/prismarr:latest
+    container_name: prismarr
+    depends_on:
+      - prowlarr
+      - sonarr
+      - radarr
+      - jellyseerr
+    stop_grace_period: 30s
+    environment:
+      PRISMARR_PORT: 7070
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1,REMOTE_ADDR}
+    volumes:
+      - prismarr_data:/var/www/html/var/data
+    ports:
+      - "${PRISMARR_PORT:-7070}:7070"
+    networks:
+      - media
+    restart: unless-stopped
+
+networks:
+  media:
+    driver: bridge
+
+volumes:
+  qbittorrent_config:
+  prowlarr_config:
+  sonarr_config:
+  radarr_config:
+  jellyfin_config:
+  jellyfin_cache:
+  jellyseerr_config:
+  prismarr_data:
