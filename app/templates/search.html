@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block body_class %}search-page{% endblock %}
+
+{% block topbar_actions %}
+<a href="/" class="nav-button">{{ t("common.new_paste") }}</a>
+{% endblock %}
+
+{% block content %}
+<section class="surface surface-narrow">
+    <h1>{{ t("search.title") }}</h1>
+    <form action="/search" method="get" class="search-form">
+        <input type="text" name="q" value="{{ query }}" placeholder="{{ t('search.placeholder') }}" autofocus>
+        <button type="submit" class="button primary">{{ t("search.button") }}</button>
+    </form>
+
+    {% if query %}
+    <p class="meta-line">{{ results|length }} {{ t("search.result_count") }}</p>
+    {% endif %}
+
+    {% if results %}
+    <div class="search-results">
+        {% for item in results %}
+        <article class="search-result">
+            <a href="{{ item.public_url }}">
+                <strong>{{ item.paste.title or item.paste.slug }}</strong>
+            </a>
+            <div class="search-result-meta">
+                <span>{{ item.paste.syntax }}</span>
+                <span>{{ item.paste.created_at.strftime('%Y-%m-%d %H:%M') if item.paste.created_at else '' }}</span>
+                <span>{{ item.paste.view_count }} {{ t("search.views") }}</span>
+            </div>
+            <p class="search-result-preview">{{ item.preview }}...</p>
+        </article>
+        {% endfor %}
+    </div>
+    {% elif query %}
+    <p class="history-empty">{{ t("search.no_results") }}</p>
+    {% endif %}
+</section>
+{% endblock %}

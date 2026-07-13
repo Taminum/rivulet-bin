@@ -8,9 +8,13 @@
         <p class="meta-line">
             <span>{{ line_count }} lines</span>
             <span>{{ content_length }} chars</span>
+            <span>{{ paste.view_count }} view{{ 's' if paste.view_count != 1 }}</span>
             <span>Created {{ paste.created_at.strftime('%Y-%m-%d %H:%M') if paste.created_at else 'just now' }}</span>
             {% if paste.updated_at and paste.updated_at != paste.created_at %}
             <span>Updated {{ paste.updated_at.strftime('%Y-%m-%d %H:%M') }}</span>
+            {% endif %}
+            {% if paste.last_viewed_at %}
+            <span>Last viewed {{ paste.last_viewed_at.strftime('%Y-%m-%d %H:%M') }}</span>
             {% endif %}
         </p>
         {% if tags %}
@@ -23,6 +27,8 @@
     </div>
     <div class="view-actions">
         <a class="button secondary" href="/raw/{{ paste.slug }}">Raw</a>
+        <a class="button secondary" href="/raw/{{ paste.slug }}/pdf">PDF</a>
+        <a class="button secondary" href="/search">Search</a>
         {% if can_edit %}
         <a class="button secondary" href="{{ changes_url }}">Changes</a>
         <a class="button secondary" href="/edit/{{ paste.slug }}">Edit</a>

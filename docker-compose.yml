@@ -10,13 +10,8 @@ services:
       - --port
       - "15212"
       - --proxy-headers
-      - --forwarded-allow-ips=*
-    environment:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/rivulet
-      SITE_NAME: Rivulet Bin
-      SITE_TAGLINE: Create pastes, publish notes, and shorten links.
-      SECRET_SALT: change-me-before-production
-      MAX_CONTENT_SIZE: 200000
+    env_file:
+      - .env
     ports:
       - "15212:15212"
     depends_on:
@@ -29,12 +24,12 @@ services:
     container_name: rivulet-db
     environment:
       POSTGRES_DB: rivulet
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d rivulet"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d rivulet"]
       interval: 5s
       timeout: 5s
       retries: 10

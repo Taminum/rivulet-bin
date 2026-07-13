@@ -8,3 +8,6 @@ smoke-*.db
 backups/
 .vscode/
 .idea/
+*.log
+test_output.txt
+test_error.txt
