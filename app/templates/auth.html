@@ -17,6 +17,7 @@
     {% endif %}
 
     <form class="auth-form" method="post" action="/{{ auth_mode }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="next_path" value="{{ next_path }}">
 
         <label class="auth-field">

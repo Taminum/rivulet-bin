@@ -7,8 +7,11 @@ WORKDIR /srv/app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 
-COPY app ./app
+COPY --chown=appuser:appuser app ./app
+
+USER appuser
 
 EXPOSE 15212
 

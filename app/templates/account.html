@@ -51,6 +51,7 @@
         {% if settings_error %}<p class="message error">{{ settings_error }}</p>{% endif %}
 
         <form method="post" action="/account/settings/preferences" class="auth-form account-settings-form" data-preferences-form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="account-settings-fields">
                 <label class="auth-field">
                     <span>{{ t("common.language") }}</span>
@@ -96,6 +97,7 @@
         {% if import_error %}<p class="message error">{{ import_error }}</p>{% endif %}
 
         <form method="post" action="/account/import" enctype="multipart/form-data" class="auth-form account-settings-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <label class="auth-field">
                 <span>{{ t("settings.import_scope") }}</span>
                 <select name="section">
@@ -224,6 +226,7 @@
                             <button class="button secondary" type="button" data-share-open data-share-title="{{ item.paste.title or item.paste.slug }}" data-share-slug="{{ item.paste.slug }}" data-share-public-url="{{ item.public_url }}" data-share-raw-url="{{ item.raw_url }}" data-share-edit-url="{{ item.share_edit_url }}" data-share-has-raw="false">{{ t("common.share") }}</button>
                             {% if item.can_delete %}
                             <form method="post" action="/account/delete/{{ item.paste.slug }}" data-delete-form data-delete-label="{{ item.paste.title or item.paste.slug }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="tab" value="{{ account_tab }}">
                                 <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
                                 <input type="hidden" name="filter_search" value="{{ active_search }}">
@@ -288,6 +291,7 @@
                             <a class="button secondary" href="{{ item.changes_url }}">{{ t("common.changes") }}</a>
                             {% if item.can_delete %}
                             <form method="post" action="/account/delete/{{ item.paste.slug }}" data-delete-form data-delete-label="{{ item.paste.title or item.paste.slug }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="tab" value="{{ account_tab }}">
                                 <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
                                 <input type="hidden" name="filter_search" value="{{ active_search }}">
@@ -343,6 +347,7 @@
                             <button class="button secondary" type="button" data-bookmark-open data-bookmark-mode="edit" data-bookmark-action="/account/bookmarks/{{ item.bookmark.id }}" data-bookmark-heading="{{ t('common.edit') }}" data-bookmark-caption="{{ item.display_url }}" data-bookmark-value-title="{{ item.bookmark.title or '' }}" data-bookmark-value-url="{{ item.bookmark.url }}" data-bookmark-value-description="{{ item.bookmark.description or '' }}" data-bookmark-value-tags="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}">{{ t("common.edit") }}</button>
                             <button class="button secondary" type="button" data-tags-open data-tags-action="/account/bookmarks/{{ item.bookmark.id }}/tags" data-tags-slug="bookmark-{{ item.bookmark.id }}" data-tags-title="{{ item.display_title }}" data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}" data-tags-tab="bookmarks" data-tags-filter="{{ active_tag or '' }}">{{ t("common.tags") }}</button>
                             <form method="post" action="/account/bookmarks/{{ item.bookmark.id }}/delete" data-delete-form data-delete-label="{{ item.display_title }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="tab" value="bookmarks">
                                 <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
                                 <input type="hidden" name="filter_search" value="{{ active_search }}">
@@ -365,6 +370,7 @@
             <div class="account-list">
                 <article class="account-card account-card-note-composer" data-preview-kind="text">
                     <form method="post" action="{{ note_form_action }}" class="account-note-card-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
                         <input type="hidden" name="filter_search" value="{{ active_search }}">
                         <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
@@ -426,6 +432,7 @@
                             <a class="button secondary" href="{{ item.edit_url }}">{{ t("common.open") }}</a>
                             <button class="button secondary" type="button" data-tags-open data-tags-action="/account/notes/{{ item.note.id }}/tags" data-tags-slug="note-{{ item.note.id }}" data-tags-title="{{ item.display_title }}" data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}" data-tags-tab="notes" data-tags-filter="{{ active_tag or '' }}">{{ t("common.tags") }}</button>
                             <form method="post" action="/account/notes/{{ item.note.id }}/delete" data-delete-form data-delete-label="{{ item.display_title }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="tab" value="notes">
                                 <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
                                 <input type="hidden" name="filter_search" value="{{ active_search }}">
@@ -464,6 +471,7 @@
         {% if bookmark_error %}<p class="message error">{{ bookmark_error }}</p>{% endif %}
 
         <form method="post" action="{{ bookmark_form_action }}" class="auth-form" data-bookmark-form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}" data-bookmark-form-filter>
             <input type="hidden" name="filter_search" value="{{ active_search }}">
             <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
@@ -505,6 +513,7 @@
         </div>
 
         <form method="post" data-tags-form class="auth-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="tab" value="{{ account_tab }}" data-tags-form-tab>
             <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}" data-tags-form-filter>
             <input type="hidden" name="filter_search" value="{{ active_search }}">

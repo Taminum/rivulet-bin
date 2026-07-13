@@ -1126,3 +1126,38 @@ for (const button of document.querySelectorAll("[data-note-preview-close]")) {
     setNotePreviewDialogOpen(false);
   });
 }
+
+function renderMarkdownPreview(text) {
+  if (typeof window.marked === "undefined") return text;
+  try {
+    return window.marked.parse(text || "");
+  } catch { return text; }
+}
+
+for (const form of document.querySelectorAll("[data-markdown-form]")) {
+  const previewPanel = form.querySelector("[data-editor-preview]");
+  const previewContent = form.querySelector("[data-preview-content]");
+  const textarea = form.querySelector(".editor-source");
+  if (!previewPanel || !previewContent || !textarea) continue;
+
+  let previewTimer = null;
+
+  function updatePreview() {
+    previewContent.innerHTML = renderMarkdownPreview(textarea.value);
+  }
+
+  for (const button of document.querySelectorAll("[data-preview-toggle]")) {
+    button.addEventListener("click", () => {
+      const isHidden = previewPanel.hidden;
+      previewPanel.hidden = !isHidden;
+      button.classList.toggle("is-active", isHidden);
+      if (isHidden) updatePreview();
+    });
+  }
+
+  textarea.addEventListener("input", () => {
+    if (previewPanel.hidden) return;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(updatePreview, 150);
+  });
+}

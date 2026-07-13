@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -63,6 +63,8 @@ class Paste(Base):
     view_mode: Mapped[str] = mapped_column(String(20), default="code")
     is_url: Mapped[bool] = mapped_column(Boolean, default=False)
     edit_key: Mapped[str] = mapped_column(String(64), index=True)
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     creator_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     last_editor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)

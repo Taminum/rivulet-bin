@@ -35,6 +35,10 @@ def get_settings() -> Settings:
             "success",
         }
     )
+    secret_salt = os.getenv("SECRET_SALT", "change-me-in-production")
+    if secret_salt == "change-me-in-production" and os.getenv("ENVIRONMENT", "development") == "production":
+        raise RuntimeError("SECRET_SALT must be set to a unique value in production")
+
     return Settings(
         site_name=os.getenv("SITE_NAME", "Rivulet Bin"),
         tagline=os.getenv(
@@ -42,7 +46,7 @@ def get_settings() -> Settings:
             "Create pastes, publish notes, and shorten links without the clutter.",
         ),
         database_url=os.getenv("DATABASE_URL", "sqlite:///./pastebin.db"),
-        secret_salt=os.getenv("SECRET_SALT", "change-me-in-production"),
+        secret_salt=secret_salt,
         max_content_size=int(os.getenv("MAX_CONTENT_SIZE", "200000")),
         reserved_slugs=reserved_slugs,
     )

@@ -39,13 +39,36 @@ TREE_SITTER_LANGUAGE_MAP = {
 SCHEMA_LIKE_KEYS = {"$schema", "$defs", "definitions", "properties", "items"}
 SQL_START_RE = re.compile(r"^\s*(select|with|insert|update|delete|create|alter|drop)\b", re.IGNORECASE)
 HTML_START_RE = re.compile(r"^\s*<(?:!doctype|html|head|body|div|span|script|style|main|section|article|\w+-\w+)", re.IGNORECASE)
-CSS_RE = re.compile(r"(^|})\s*[^{}\n]+?\{\s*[^{}:;\n]+:\s*[^{};\n]+;\s*[^{}]*\}", re.DOTALL)
+CSS_RE = re.compile(r"(^|})\s*[.#]?[\w-]+\s*\{\s*[\w-]+\s*:\s*[^{};\n]+;\s*[^{}]*\}", re.DOTALL)
 YAML_RE = re.compile(r"^\s*[\w\"'\-]+\s*:\s*.+$", re.MULTILINE)
-PYTHON_RE = re.compile(r"^\s*(def |class |from |import |async def |if __name__ == ['\"]__main__['\"]:)", re.MULTILINE)
-BASH_RE = re.compile(r"^\s*(#!/bin/(ba)?sh|echo\b|export\b|if \[|for\b|while\b|case\b)", re.MULTILINE)
-TYPESCRIPT_RE = re.compile(r"\b(interface|type|enum|implements|readonly|public|private|protected)\b|:\s*(string|number|boolean|unknown|never|void|Record<|Promise<|Array<)")
-JAVASCRIPT_RE = re.compile(r"\b(const|let|var|function|console\.|document\.|window\.|import\s|export\s)\b|=>")
+PYTHON_RE = re.compile(r"^\s*(def \w+|class \w+|from \w+ import|import \w+|async def \w+|if __name__ == ['\"]__main__['\"]:)", re.MULTILINE)
+BASH_RE = re.compile(r"^\s*(#!/bin/(ba)?sh|echo\b|export\b|\[ |for\b|while\b|case\b)", re.MULTILINE)
+TYPESCRIPT_RE = re.compile(r"\b(interface\s+\w+|type\s+\w+\s*=|:\s*(string|number|boolean|unknown|never|void)\b|Record<|Promise<)")
+JAVASCRIPT_RE = re.compile(r"\bconst\s+\w+\s*=|\blet\s+\w+\s*=|\bvar\s+\w+\s*=|console\.|document\.|window\.|=>|require\s*\(\s*['\"]|module\.exports")
 TEXT_WORD_RE = re.compile(r"[^\W\d_]{2,}", re.UNICODE)
+GO_RE = re.compile(r"^\s*(package\s+\w+\s*$|func\s+(?:\(|main))", re.MULTILINE)
+RUST_RE = re.compile(r"\b(fn\s+\w+|let\s+mut\b|impl\s+\w+|pub\s+(fn|struct|enum)|use\s+\w+::|#\[derive\()", re.MULTILINE)
+JAVA_RE = re.compile(r"\b(public\s+class\s+\w+|import\s+java\.|public\s+static\s+void\s+main)", re.MULTILINE)
+C_RE = re.compile(r"^\s*#include\s+[<\"]|^\s*(int|char|void|float|double)\s+\w+\s*\(|printf\s*\(|scanf\s*\(", re.MULTILINE)
+CPP_RE = re.compile(r"std::|cout\s*<<|cin\s*>>|nullptr|template\s*<|class\s+\w+\s*:|namespace\s+\w+\s*\{", re.MULTILINE)
+CSHARP_RE = re.compile(r"\b(using\s+System|\.csproj|public\s+static\s+void\s+Main|async\s+Task)", re.MULTILINE)
+RUBY_RE = re.compile(r"\b(def\s+\w+\s*$|class\s+\w+\s*$|module\s+\w+\s*$|require\s+['\"]|puts\s+['\"])", re.MULTILINE)
+PHP_RE = re.compile(r"<\?php|\$\w+\s*=\s*['\"]|\$\w+\s*\.\.|\$\w+\s*\[", re.MULTILINE)
+DOCKERFILE_RE = re.compile(r"^FROM\s+\w+|^RUN\s|^CMD\s|^COPY\s|^ADD\s|^ENTRYPOINT\s|^ENV\s|^EXPOSE\s|^WORKDIR\s", re.MULTILINE)
+TOML_RE = re.compile(r"^\s*\[[\w.-]+\]\s*$|^\s*[\w-]+\s*=\s*[\"]", re.MULTILINE)
+LUA_RE = re.compile(r"\bfunction\s+\w+\s*\(|local\s+\w+\s*=|require\s+['\"]|print\s*\(", re.MULTILINE)
+R_RE = re.compile(r"^\s*(library|ggplot|data\.frame|<-|read\.csv|cat\(|length\()", re.MULTILINE)
+ELIXIR_RE = re.compile(r"\b(defmodule\s+\w+|defp\s+\w+|:ok|:error|IO\.inspect|@doc|@spec)", re.MULTILINE)
+DART_RE = re.compile(r"\b(void\s+main|class\s+\w+\s*\{|import\s+'package:|void\s+\w+\s*\()", re.MULTILINE)
+POWERSHELL_RE = re.compile(r"\b(Get-|Set-|New-|Remove-|Write-|Import-|Select-|Where-|\$ErrorActionPreference)", re.MULTILINE)
+GRAPHQL_RE = re.compile(r"^\s*(query|mutation|subscription|fragment)\s+\w+", re.MULTILINE)
+TERRAFORM_RE = re.compile(r"^\s*(resource|data|variable|output|module|provider)\s+['\"]", re.MULTILINE)
+CMAKE_RE = re.compile(r"^\s*(cmake_minimum_required|project|add_executable|add_library|find_package|target_link)\s*\(", re.MULTILINE)
+KOTLIN_RE = re.compile(r"\b(fun\s+\w+\s*\(|val\s+\w+\s*:\s*\w+|var\s+\w+\s*:\s*\w+|class\s+\w+.*:\s*\w+|import\s+kotlin\.)", re.MULTILINE)
+SWIFT_RE = re.compile(r"\b(func\s+\w+\s*\(|let\s+\w+\s*=|var\s+\w+\s*=|import\s+UIKit|guard\s+let|struct\s+\w+\s*\{)", re.MULTILINE)
+SCALA_RE = re.compile(r"\b(object\s+\w+\s+extends|import\s+scala\.|val\s+\w+\s*:\s*\w+\s*=)", re.MULTILINE)
+HASKELL_RE = re.compile(r"(?:\bdata\s+\w+\s*=|\bwhere\s*$|\bimport\s+Data\.|\bmodule\s+\w+\s+where|::\s*(?:IO|Maybe|Either|Int|String|Bool|Char)\s)", re.MULTILINE)
+PERL_RE = re.compile(r"\b(my\s+\$|sub\s+\w+|use\s+(strict|warnings)|print\s+\$|qw\()", re.MULTILINE)
 
 
 def validate_content(content: str, syntax: str) -> ValidationIssue | None:
@@ -66,8 +89,8 @@ def detect_syntax(content: str) -> str:
     if _looks_like_url_text(stripped):
         return "text"
 
-    if _looks_like_json(stripped):
-        return "json"
+    if HASKELL_RE.search(stripped):
+        return "haskell"
 
     if _looks_like_yaml(stripped):
         return "yaml"
@@ -78,17 +101,92 @@ def detect_syntax(content: str) -> str:
     if SQL_START_RE.search(stripped):
         return "sql"
 
+    if PHP_RE.search(stripped):
+        return "php"
+
     if BASH_RE.search(stripped):
         return "bash"
 
+    if RUBY_RE.search(stripped):
+        return "ruby"
+
+    if ELIXIR_RE.search(stripped):
+        return "elixir"
+
     if PYTHON_RE.search(stripped):
         return "python"
+
+    if RUST_RE.search(stripped):
+        return "rust"
+
+    if GO_RE.search(stripped):
+        return "go"
+
+    if JAVA_RE.search(stripped):
+        return "java"
+
+    if CSHARP_RE.search(stripped):
+        return "csharp"
+
+    if DART_RE.search(stripped):
+        return "dart"
+
+    if CPP_RE.search(stripped):
+        return "cpp"
+
+    if C_RE.search(stripped):
+        return "c"
+
+    if KOTLIN_RE.search(stripped):
+        return "kotlin"
+
+    if SWIFT_RE.search(stripped):
+        return "swift"
+
+    if SCALA_RE.search(stripped):
+        return "scala"
+
+    if ELIXIR_RE.search(stripped):
+        return "elixir"
+
+    if PERL_RE.search(stripped):
+        return "perl"
+
+    if TOML_RE.search(stripped):
+        return "toml"
+
+    if _looks_like_json(stripped):
+        return "json"
 
     if TYPESCRIPT_RE.search(stripped):
         return "typescript"
 
     if JAVASCRIPT_RE.search(stripped):
         return "javascript"
+
+    if DOCKERFILE_RE.search(stripped):
+        return "dockerfile"
+
+    if R_RE.search(stripped):
+        return "r"
+
+    if POWERSHELL_RE.search(stripped):
+        return "powershell"
+
+    if TERRAFORM_RE.search(stripped):
+        return "terraform"
+
+    if CMAKE_RE.search(stripped):
+        return "cmake"
+
+    if GRAPHQL_RE.search(stripped):
+        return "graphql"
+
+    if JAVASCRIPT_RE.search(stripped):
+        return "javascript"
+
+    if LUA_RE.search(stripped):
+        return "lua"
 
     if _looks_like_css(stripped):
         return "css"
@@ -218,6 +316,8 @@ def _looks_like_css(content: str) -> bool:
     if content.startswith("{") or content.startswith("["):
         return False
     if "<" in content or "function" in content:
+        return False
+    if "query" in content or "mutation" in content:
         return False
     return bool(CSS_RE.search(content))
 

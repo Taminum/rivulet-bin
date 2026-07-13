@@ -38,6 +38,7 @@
 
 {% block topbar_actions %}
 <button type="button" class="nav-button" data-history-open title="{{ t('site.history') }} (Ctrl+Shift+H)">{{ t("site.history") }}</button>
+<button type="button" class="nav-button" data-preview-toggle title="Toggle markdown preview">Preview</button>
 <button type="submit" form="paste-form" class="button primary nav-button" title="{{ t('common.save') }} (Ctrl+S)">{{ t("common.save") }}</button>
 {% endblock %}
 
@@ -47,7 +48,9 @@
     <div class="message error">{{ error }}</div>
     {% endif %}
 
-    <form id="paste-form" class="paste-form paste-form-fullscreen" action="/publish" method="post" data-paste-form>
+    <form id="paste-form" class="paste-form paste-form-fullscreen" action="/publish" method="post" data-paste-form data-markdown-form>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="editor-split">
         <label
             class="editor-field editor-field-fullscreen {% if validation_error %}has-validation-error{% endif %}"
             {% if validation_error %}
@@ -58,6 +61,10 @@
             <span class="validation-line-marker" aria-hidden="true"></span>
             <textarea class="editor-source" name="content" rows="18" placeholder="{{ t('home.content_placeholder') }}" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off">{{ form_values.content }}</textarea>
         </label>
+        <div class="editor-preview" data-editor-preview hidden>
+            <div class="prose markdown-body" data-preview-content></div>
+        </div>
+        </div>
     </form>
 </section>
 
