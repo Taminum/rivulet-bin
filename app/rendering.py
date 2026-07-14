@@ -126,7 +126,12 @@ def render_code_lines(content: str, syntax: str) -> list[CodeLine]:
         highlighted_lines = [escape(content) or " "]
 
     return [
-        CodeLine(number=index, html=Markup(bleach.clean(line, tags={"span", "code"}, strip=True) or " "))
+        CodeLine(
+            number=index,
+            html=Markup(
+                bleach.clean(line, tags={"span", "code"}, attributes={"span": ["class"]}, strip=True) or " "
+            ),
+        )
         for index, line in enumerate(highlighted_lines, start=1)
     ]
 
