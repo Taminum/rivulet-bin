@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 
 from app.services import (
     _assert_csrf,
+    _check_rate_limit,
     _clear_auth_cookie,
     _current_user,
     _normalize_username,
@@ -82,6 +83,19 @@ def register(
     target_path = normalize_next_path(next_path)
     if current_user:
         return RedirectResponse(url=target_path, status_code=status.HTTP_303_SEE_OTHER)
+
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(f"register:{client_ip}", limit=5, window=60.0):
+        return _render_auth_page(
+            request,
+            settings,
+            title=translate(language, "auth.register_title"),
+            auth_mode="register",
+            form_values={"username": username},
+            error=translate(language, "auth.error_rate_limited"),
+            next_path=target_path,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
 
     normalized_username = _normalize_username(username)
     error = _validate_registration_form(normalized_username, password, confirm_password, language)
@@ -160,6 +174,19 @@ def login(
     target_path = normalize_next_path(next_path)
     if current_user:
         return RedirectResponse(url=target_path, status_code=status.HTTP_303_SEE_OTHER)
+
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(f"login:{client_ip}", limit=10, window=60.0):
+        return _render_auth_page(
+            request,
+            settings,
+            title=translate(language, "auth.login_title"),
+            auth_mode="login",
+            form_values={"username": username},
+            error=translate(language, "auth.error_rate_limited"),
+            next_path=target_path,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
 
     normalized_username = _normalize_username(username)
     user = session.scalar(select(User).where(User.username == normalized_username))

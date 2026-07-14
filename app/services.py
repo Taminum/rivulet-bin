@@ -217,11 +217,11 @@ RATE_LIMIT_WINDOW = 60.0
 
 RATE_LIMIT_MAX = 30
 
-def _check_rate_limit(key: str) -> bool:
+def _check_rate_limit(key: str, *, limit: int = RATE_LIMIT_MAX, window: float = RATE_LIMIT_WINDOW) -> bool:
     now = time.time()
     timestamps = _rate_limit_store[key]
-    _rate_limit_store[key] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
-    if len(_rate_limit_store[key]) >= RATE_LIMIT_MAX:
+    _rate_limit_store[key] = [t for t in timestamps if now - t < window]
+    if len(_rate_limit_store[key]) >= limit:
         return False
     _rate_limit_store[key].append(now)
     return True
