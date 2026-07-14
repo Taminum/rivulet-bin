@@ -1,4 +1,6 @@
-# Rivulet Bin
+<p align="center">
+  <img src="docs/logo.svg" alt="Rivulet Bin" width="420">
+</p>
 
 Self-hosted pastebin and link shortener inspired by projects like dogbin and its forks.
 
