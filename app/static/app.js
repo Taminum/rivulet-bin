@@ -1140,14 +1140,39 @@ for (const form of document.querySelectorAll("[data-markdown-form]")) {
   const textarea = form.querySelector(".editor-source");
   if (!previewPanel || !previewContent || !textarea) continue;
 
+  const modeField = getAssociatedField(form, "mode");
+  const syntaxField = getAssociatedField(form, "syntax");
+  const previewButtons = [...document.querySelectorAll("[data-preview-toggle]")];
+
   let previewTimer = null;
 
   function updatePreview() {
     previewContent.innerHTML = renderMarkdownPreview(textarea.value);
   }
 
-  for (const button of document.querySelectorAll("[data-preview-toggle]")) {
+  function isMarkdownContext() {
+    const mode = modeField?.value || "auto";
+    const syntax = syntaxField?.value || "auto";
+    return mode === "markdown" || (mode === "auto" && syntax === "markdown");
+  }
+
+  function updatePreviewAvailability() {
+    const available = isMarkdownContext();
+    for (const button of previewButtons) {
+      button.disabled = !available;
+      button.title = available
+        ? "Toggle markdown preview"
+        : "Switch Mode or Syntax to Markdown to preview";
+    }
+    if (!available && !previewPanel.hidden) {
+      previewPanel.hidden = true;
+      for (const button of previewButtons) button.classList.remove("is-active");
+    }
+  }
+
+  for (const button of previewButtons) {
     button.addEventListener("click", () => {
+      if (button.disabled) return;
       const isHidden = previewPanel.hidden;
       previewPanel.hidden = !isHidden;
       button.classList.toggle("is-active", isHidden);
@@ -1160,4 +1185,8 @@ for (const form of document.querySelectorAll("[data-markdown-form]")) {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(updatePreview, 150);
   });
+
+  modeField?.addEventListener("change", updatePreviewAvailability);
+  syntaxField?.addEventListener("change", updatePreviewAvailability);
+  updatePreviewAvailability();
 }

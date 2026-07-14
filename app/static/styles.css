@@ -301,6 +301,17 @@ a {
     background: var(--surface-muted);
 }
 
+.nav-button:disabled {
+    color: var(--text-faint);
+    background: transparent;
+    cursor: not-allowed;
+}
+
+.nav-button:disabled:hover {
+    color: var(--text-faint);
+    background: transparent;
+}
+
 .topbar-right a.is-active {
     color: var(--text);
     background: var(--surface-muted);
