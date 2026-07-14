@@ -283,7 +283,6 @@
                             <span>{{ t("common.last_edited_by", user=item.last_editor_label) }}</span>
                         </div>
                         <div class="account-actions">
-                            <a class="button secondary" href="/{{ item.paste.slug }}">{{ t("common.open") }}</a>
                             <a class="button secondary" href="{{ item.edit_url }}">{{ t("common.edit") }}</a>
                             <a class="button secondary" href="/raw/{{ item.paste.slug }}">{{ t("common.raw") }}</a>
                             <button class="button secondary" type="button" data-share-open data-share-title="{{ item.paste.title or item.paste.slug }}" data-share-slug="{{ item.paste.slug }}" data-share-public-url="{{ item.public_url }}" data-share-raw-url="{{ item.raw_url }}" data-share-edit-url="{{ item.share_edit_url }}" data-share-has-raw="{{ 'true' if not item.paste.is_url else 'false' }}">{{ t("common.share") }}</button>
@@ -345,7 +344,6 @@
                         </div>
                         {% endif %}
                         <div class="account-actions">
-                            <a class="button secondary" href="{{ item.bookmark.url }}" target="_blank" rel="noreferrer">{{ t("common.open") }}</a>
                             <button class="button secondary" type="button" data-bookmark-open data-bookmark-mode="edit" data-bookmark-action="/account/bookmarks/{{ item.bookmark.id }}" data-bookmark-heading="{{ t('common.edit') }}" data-bookmark-caption="{{ item.display_url }}" data-bookmark-value-title="{{ item.bookmark.title or '' }}" data-bookmark-value-url="{{ item.bookmark.url }}" data-bookmark-value-description="{{ item.bookmark.description or '' }}" data-bookmark-value-tags="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}">{{ t("common.edit") }}</button>
                             <button class="button secondary" type="button" data-tags-open data-tags-action="/account/bookmarks/{{ item.bookmark.id }}/tags" data-tags-slug="bookmark-{{ item.bookmark.id }}" data-tags-title="{{ item.display_title }}" data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}" data-tags-tab="bookmarks" data-tags-filter="{{ active_tag or '' }}">{{ t("common.tags") }}</button>
                             <form method="post" action="/account/bookmarks/{{ item.bookmark.id }}/delete" data-delete-form data-delete-label="{{ item.display_title }}">
