@@ -1225,7 +1225,7 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
     min-width: 0;
     margin: 0;
     padding: 1rem 1.05rem;
-    color: var(--editor-value);
+    color: var(--text-soft);
     font-size: 0.87rem;
     line-height: 1.55;
     white-space: pre-wrap;
@@ -1810,7 +1810,13 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 .line-code .cm,
 .line-code .ch,
 .line-code .cp,
-.line-code .cpf {
+.line-code .cpf,
+.account-preview-code .c,
+.account-preview-code .c1,
+.account-preview-code .cm,
+.account-preview-code .ch,
+.account-preview-code .cp,
+.account-preview-code .cpf {
     color: var(--editor-comment);
     font-style: italic;
 }
@@ -1818,7 +1824,11 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 .line-code .nt,
 .line-code .na,
 .line-code .nc,
-.line-code .nn {
+.line-code .nn,
+.account-preview-code .nt,
+.account-preview-code .na,
+.account-preview-code .nc,
+.account-preview-code .nn {
     color: var(--editor-property);
 }
 
@@ -1849,7 +1859,35 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 .line-code .kd,
 .line-code .kt,
 .line-code .nb,
-.line-code .bp {
+.line-code .bp,
+.account-preview-code .s,
+.account-preview-code .s1,
+.account-preview-code .s2,
+.account-preview-code .sa,
+.account-preview-code .sb,
+.account-preview-code .sc,
+.account-preview-code .sd,
+.account-preview-code .se,
+.account-preview-code .sh,
+.account-preview-code .si,
+.account-preview-code .sr,
+.account-preview-code .ss,
+.account-preview-code .sx,
+.account-preview-code .dl,
+.account-preview-code .l,
+.account-preview-code .ld,
+.account-preview-code .m,
+.account-preview-code .mb,
+.account-preview-code .mf,
+.account-preview-code .mh,
+.account-preview-code .mi,
+.account-preview-code .il,
+.account-preview-code .mo,
+.account-preview-code .kc,
+.account-preview-code .kd,
+.account-preview-code .kt,
+.account-preview-code .nb,
+.account-preview-code .bp {
     color: var(--editor-value);
 }
 
@@ -1857,16 +1895,24 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 .line-code .kn,
 .line-code .kp,
 .line-code .kr,
-.line-code .ow {
+.line-code .ow,
+.account-preview-code .k,
+.account-preview-code .kn,
+.account-preview-code .kp,
+.account-preview-code .kr,
+.account-preview-code .ow {
     color: var(--editor-keyword);
 }
 
 .line-code .p,
-.line-code .o {
+.line-code .o,
+.account-preview-code .p,
+.account-preview-code .o {
     color: var(--editor-bracket);
 }
 
-.line-code .err {
+.line-code .err,
+.account-preview-code .err {
     color: var(--danger-text);
     background: transparent;
 }

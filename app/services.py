@@ -46,6 +46,7 @@ from app.rendering import (
     normalize_slug,
     render_code_lines,
     render_markdown,
+    render_preview_html,
     validate_slug,
 )
 from app.validation import (
@@ -1258,6 +1259,7 @@ def _profile_items(
                 "changes_url": request.url_for("revisions_page", slug=paste.slug).path,
                 "preview_kind": _profile_preview_kind(paste, resolved_syntax),
                 "preview_text": _profile_preview_text(paste),
+                "preview_html": _profile_preview_html(paste, resolved_syntax),
                 "preview_label": _profile_preview_label(paste, resolved_syntax, language),
                 "display_syntax": _profile_syntax_label(paste, resolved_syntax, language),
                 "creator_label": _profile_user_label(paste.creator, language),
@@ -1375,6 +1377,16 @@ def _profile_preview_text(paste: Paste) -> str:
         return content
 
     return _excerpt_text(content)
+
+def _profile_preview_html(paste: Paste, resolved_syntax: str) -> Markup | None:
+    if paste.is_url or paste.view_mode in {"link", "markdown"}:
+        return None
+
+    content = paste.content.replace("\r\n", "\n").strip()
+    if not content:
+        return None
+
+    return render_preview_html(_excerpt_text(content), resolved_syntax)
 
 def _profile_preview_label(paste: Paste, resolved_syntax: str, language: str = "en") -> str:
     if paste.is_url or paste.view_mode == "link":

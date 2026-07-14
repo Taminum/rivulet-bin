@@ -136,6 +136,15 @@ def render_code_lines(content: str, syntax: str) -> list[CodeLine]:
     ]
 
 
+def render_preview_html(content: str, syntax: str) -> Markup:
+    lexer = _resolve_lexer(content, syntax)
+    formatter = HtmlFormatter(nowrap=True)
+    highlighted = highlight(content or " ", lexer, formatter)
+    return Markup(
+        bleach.clean(highlighted, tags={"span", "code"}, attributes={"span": ["class"]}, strip=True) or " "
+    )
+
+
 def _resolve_lexer(content: str, syntax: str):
     if syntax == "text":
         return TextLexer(stripnl=False)

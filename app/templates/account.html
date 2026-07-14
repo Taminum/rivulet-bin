@@ -253,6 +253,8 @@
                             {% if item.preview_kind == "link" %}
                             <span class="account-preview-link-label">{{ t("account.shortened_link") }}</span>
                             <strong class="account-preview-link">{{ item.preview_text }}</strong>
+                            {% elif item.preview_html %}
+                            <pre class="account-preview-code">{{ item.preview_html }}</pre>
                             {% else %}
                             <pre class="account-preview-code">{{ item.preview_text }}</pre>
                             {% endif %}
