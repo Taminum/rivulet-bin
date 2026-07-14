@@ -52,12 +52,14 @@ from app.services import (
     _current_user,
     _edit_url,
     _edit_with_error,
+    _expiry_status_text,
     _format_tags_input,
     _get_paste_or_404,
     _get_revision_or_404,
     _history_items,
     _home_with_error,
     _is_owned_by_user,
+    _is_paste_expired,
     _maybe_attach_collaborator,
     _normalize_tags,
     _normalize_url_scheme,
@@ -65,6 +67,7 @@ from app.services import (
     _profile_user_label,
     _record_revision,
     _resolve_effective_syntax,
+    _resolve_expiry,
     _resolve_language,
     _resolve_short_link_title,
     _revision_compare_url,
@@ -89,6 +92,7 @@ def publish(
     custom_slug: str = Form(default=""),
     syntax: str = Form(default="auto"),
     mode: str = Form(default="auto"),
+    expires: str = Form(default="never"),
     csrf_token: str = Form(default=""),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -116,6 +120,7 @@ def publish(
             effective_syntax,
             mode,
             requested_syntax=syntax,
+            expires=expires,
         )
 
     if not content.strip():
@@ -131,6 +136,7 @@ def publish(
             syntax,
             mode,
             requested_syntax=syntax,
+            expires=expires,
         )
 
     if len(content) > settings.max_content_size:
@@ -146,6 +152,7 @@ def publish(
             effective_syntax,
             mode,
             requested_syntax=syntax,
+            expires=expires,
         )
 
     stripped_content = content.strip()
@@ -170,6 +177,7 @@ def publish(
             mode,
             validation_issue=validation_issue,
             requested_syntax=syntax,
+            expires=expires,
         )
 
     slug = _claim_slug(session, settings, custom_slug)
@@ -186,8 +194,10 @@ def publish(
             effective_syntax,
             mode,
             requested_syntax=syntax,
+            expires=expires,
         )
 
+    expire_at, expire_after_views = _resolve_expiry(expires)
     paste = Paste(
         slug=slug,
         title=title,
@@ -197,6 +207,8 @@ def publish(
         view_mode=view_mode,
         is_url=is_url,
         edit_key=generate_edit_key(),
+        expire_at=expire_at,
+        expire_after_views=expire_after_views,
         owner_id=current_user.id if current_user else None,
         creator_id=current_user.id if current_user else None,
         last_editor_id=current_user.id if current_user else None,
@@ -224,6 +236,7 @@ def success_page(
 ) -> HTMLResponse:
     paste = _get_paste_or_404(session, slug)
     current_user = _current_user(request, session, settings)
+    current_language = _resolve_language(request, current_user)
     origin = str(request.base_url).rstrip("/")
     public_url = origin + request.url_for("view_paste", slug=paste.slug).path
     raw_url = origin + request.url_for("raw_paste", slug=paste.slug).path
@@ -249,6 +262,7 @@ def success_page(
             show_edit=key == paste.edit_key or _can_user_edit_paste(paste, current_user),
             updated=bool(updated),
             is_owned_by_current_user=_is_owned_by_user(paste, current_user),
+            expiry_text=_expiry_status_text(paste, current_language),
         ),
     )
 
@@ -607,15 +621,33 @@ def view_paste(
 ):
     paste = _get_paste_or_404(session, slug)
     current_user = _current_user(request, session, settings)
-    if paste.is_url:
-        paste.view_count += 1
-        paste.last_viewed_at = datetime.now(timezone.utc)
+    current_language = _resolve_language(request, current_user)
+
+    if _is_paste_expired(paste):
+        expired_reason = "views" if paste.expire_after_views is not None else "time"
+        expired_at = paste.expire_at
+        session.delete(paste)
         session.commit()
-        return RedirectResponse(url=paste.content, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+        return templates.TemplateResponse(
+            request=request,
+            name="expired.html",
+            status_code=status.HTTP_410_GONE,
+            context=_base_context(
+                request,
+                settings,
+                title=translate(current_language, "expired.title"),
+                current_user=current_user,
+                reason=expired_reason,
+                expired_at=expired_at,
+            ),
+        )
 
     paste.view_count += 1
     paste.last_viewed_at = datetime.now(timezone.utc)
     session.commit()
+
+    if paste.is_url:
+        return RedirectResponse(url=paste.content, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
     view_data = _build_content_view(paste.content, paste.syntax, paste.view_mode)
 
@@ -636,5 +668,6 @@ def view_paste(
             content_length=view_data["content_length"],
             can_edit=_can_user_edit_paste(paste, current_user),
             changes_url=_changes_url(request, paste, current_user),
+            expiry_text=_expiry_status_text(paste, current_language),
         ),
     )

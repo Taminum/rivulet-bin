@@ -16,6 +16,9 @@
             {% if paste.last_viewed_at %}
             <span>Last viewed {{ paste.last_viewed_at.strftime('%Y-%m-%d %H:%M') }}</span>
             {% endif %}
+            {% if expiry_text %}
+            <span>{{ expiry_text }}</span>
+            {% endif %}
         </p>
         {% if tags %}
         <div class="tag-list page-tags">

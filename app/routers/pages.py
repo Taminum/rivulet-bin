@@ -57,6 +57,7 @@ def home(
                 "custom_slug": "",
                 "syntax": requested_syntax,
                 "mode": requested_mode,
+                "expires": "never",
             },
             error=None,
             history_items=_history_items(request, session),

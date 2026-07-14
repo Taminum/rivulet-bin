@@ -23,6 +23,7 @@ from app.i18n import (
     calendar_label,
     calendar_weekdays,
     client_messages,
+    expire_options as translated_expire_options,
     language_options,
     mode_options as translated_mode_options,
     normalize_language,
@@ -58,6 +59,7 @@ from collections import (
 from datetime import (
     date,
     datetime,
+    timedelta,
     timezone,
 )
 from fastapi import (
@@ -250,6 +252,7 @@ def _base_context(request: Request, settings: Settings, current_user: User | Non
         "theme_options": translated_theme_options(language),
         "syntax_options": translated_syntax_options(language),
         "mode_options": translated_mode_options(language),
+        "expire_options": translated_expire_options(language),
         "client_texts": client_messages(language),
         "csrf_token": csrf_token,
         "t": t,
@@ -1974,6 +1977,40 @@ def _get_paste_or_404(session: Session, slug: str) -> Paste:
         raise HTTPException(status_code=404, detail="Paste not found")
     return paste
 
+EXPIRE_VIEW_PRESETS = {"burn": 1, "views10": 10, "views100": 100}
+EXPIRE_TIME_PRESETS = {
+    "1h": timedelta(hours=1),
+    "1d": timedelta(days=1),
+    "1w": timedelta(weeks=1),
+    "1m": timedelta(days=30),
+}
+
+def _resolve_expiry(value: str) -> tuple[datetime | None, int | None]:
+    if value in EXPIRE_VIEW_PRESETS:
+        return None, EXPIRE_VIEW_PRESETS[value]
+    if value in EXPIRE_TIME_PRESETS:
+        return datetime.now(timezone.utc) + EXPIRE_TIME_PRESETS[value], None
+    return None, None
+
+def _is_paste_expired(paste: Paste) -> bool:
+    if paste.expire_at is not None:
+        expire_at = paste.expire_at
+        if expire_at.tzinfo is None:
+            expire_at = expire_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) >= expire_at:
+            return True
+    if paste.expire_after_views is not None and paste.view_count >= paste.expire_after_views:
+        return True
+    return False
+
+def _expiry_status_text(paste: Paste, language: str) -> str | None:
+    if paste.expire_after_views is not None:
+        remaining = max(paste.expire_after_views - paste.view_count, 0)
+        return translate(language, "expires.views_remaining", count=remaining)
+    if paste.expire_at is not None:
+        return translate(language, "expires.at", date=paste.expire_at.strftime("%Y-%m-%d %H:%M UTC"))
+    return None
+
 def _get_revision_or_404(session: Session, paste_id: int, revision_number: int) -> PasteRevision:
     revision = session.scalar(
         select(PasteRevision)
@@ -2043,6 +2080,7 @@ def _home_with_error(
     mode: str,
     validation_issue: ValidationIssue | None = None,
     requested_syntax: str | None = None,
+    expires: str = "never",
 ) -> HTMLResponse:
     current_user = _current_user(request, session, settings)
     return templates.TemplateResponse(
@@ -2061,6 +2099,7 @@ def _home_with_error(
                 "custom_slug": custom_slug,
                 "syntax": syntax,
                 "mode": mode,
+                "expires": expires,
             },
             error=error,
             validation_error=_serialize_validation_issue(validation_issue),

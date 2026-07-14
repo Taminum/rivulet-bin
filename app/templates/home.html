@@ -4,7 +4,7 @@
 {% block page_shell_class %}page-shell-editor{% endblock %}
 
 {% block topbar_editor %}
-<div class="topbar-editor">
+<div class="topbar-editor topbar-editor-6">
     <label class="topbar-field topbar-field-title">
         <span>{{ t("home.field_title") }}</span>
         <input form="paste-form" type="text" name="title" maxlength="120" placeholder="{{ t('home.title_placeholder') }}" value="{{ form_values.title }}">
@@ -30,6 +30,14 @@
         <select form="paste-form" name="syntax" data-syntax-management="{{ syntax_management | default('manual') }}">
             {% for value, label in syntax_options %}
             <option value="{{ value }}" {% if form_values.syntax == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <label class="topbar-field topbar-field-compact">
+        <span>{{ t("home.field_expires") }}</span>
+        <select form="paste-form" name="expires">
+            {% for value, label in expire_options %}
+            <option value="{{ value }}" {% if form_values.expires == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
     </label>

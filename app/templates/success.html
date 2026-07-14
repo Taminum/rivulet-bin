@@ -6,6 +6,7 @@
     <p class="mini-note">
         {% if paste.is_url %}{{ t("success.short_link_ready") }}{% else %}{{ t("success.paste_saved") }}{% endif %}
         {% if is_owned_by_current_user %} {{ t("success.attached_profile") }}{% endif %}
+        {% if expiry_text %} {{ expiry_text }}{% endif %}
     </p>
     {% if tags %}
     <div class="tag-list">

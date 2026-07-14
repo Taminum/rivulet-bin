@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-titlebar">
+    <div>
+        <p class="eyebrow">{{ t("expired.eyebrow") }}</p>
+        <h1>{{ t("expired.title") }}</h1>
+        <p class="meta-line">
+            {% if reason == "views" %}
+            <span>{{ t("expired.reason_views") }}</span>
+            {% else %}
+            <span>{{ t("expired.reason_time", date=expired_at.strftime('%Y-%m-%d %H:%M UTC') if expired_at else "") }}</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="view-actions">
+        <a class="button secondary" href="/search">{{ t("common.search") }}</a>
+        <a class="button primary" href="/">{{ t("home.title") }}</a>
+    </div>
+</section>
+{% endblock %}

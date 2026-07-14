@@ -66,6 +66,10 @@ def _ensure_runtime_schema() -> None:
             connection.execute(text("ALTER TABLE pastes ADD COLUMN creator_id INTEGER"))
         if "last_editor_id" not in paste_columns:
             connection.execute(text("ALTER TABLE pastes ADD COLUMN last_editor_id INTEGER"))
+        if "expire_at" not in paste_columns:
+            connection.execute(text("ALTER TABLE pastes ADD COLUMN expire_at TIMESTAMP"))
+        if "expire_after_views" not in paste_columns:
+            connection.execute(text("ALTER TABLE pastes ADD COLUMN expire_after_views INTEGER"))
         connection.execute(text("UPDATE pastes SET tags_json = '[]' WHERE tags_json IS NULL"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_pastes_owner_id ON pastes (owner_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_pastes_creator_id ON pastes (creator_id)"))

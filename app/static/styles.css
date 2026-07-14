@@ -239,6 +239,10 @@ a {
     align-items: end;
 }
 
+.topbar-editor-6 {
+    grid-template-columns: minmax(160px, 1.15fr) minmax(120px, 0.9fr) minmax(140px, 1fr) minmax(100px, 0.7fr) minmax(110px, 0.75fr) minmax(120px, 0.8fr);
+}
+
 .topbar-field {
     min-width: 0;
     display: grid;
