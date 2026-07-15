@@ -1,0 +1,17 @@
+{
+  "name": "Rivulet Bin",
+  "short_name": "Rivulet",
+  "description": "Create pastes, publish notes, and shorten links.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08090a",
+  "theme_color": "#08090a",
+  "icons": [
+    {
+      "src": "/static/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

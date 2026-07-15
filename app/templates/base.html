@@ -6,6 +6,8 @@
     <title>{{ title }} | {{ site_name }}</title>
     <meta name="description" content="{{ tagline }}">
     <link rel="icon" type="image/svg+xml" href="{{ request.url_for('static', path='/brand-owl.svg') }}">
+    <link rel="manifest" href="/static/manifest.json">
+    <meta name="theme-color" content="#08090a">
     <script>
         (function () {
             const serverDefault = {{ default_theme_preference | tojson }};
@@ -76,5 +78,10 @@
     <script src="{{ request.url_for('static', path='/vendor/codemirror/mode/shell/shell.min.js') }}?v={{ asset_version }}" defer></script>
     <script src="{{ request.url_for('static', path='/vendor/marked/marked.min.js') }}?v={{ asset_version }}" defer></script>
     <script src="{{ request.url_for('static', path='/app.js') }}?v={{ asset_version }}" defer></script>
+    <script>
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("/static/sw.js");
+        }
+    </script>
 </body>
 </html>
