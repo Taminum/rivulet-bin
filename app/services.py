@@ -1386,7 +1386,7 @@ def _profile_preview_html(paste: Paste, resolved_syntax: str) -> Markup | None:
     if not content:
         return None
 
-    return render_preview_html(_excerpt_text(content), resolved_syntax)
+    return render_preview_html(_excerpt_text(content, max_lines=6, max_chars=280), resolved_syntax)
 
 def _profile_preview_label(paste: Paste, resolved_syntax: str, language: str = "en") -> str:
     if paste.is_url or paste.view_mode == "link":

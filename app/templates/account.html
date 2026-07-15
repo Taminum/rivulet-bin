@@ -263,7 +263,7 @@
                     <div class="account-card-body">
                         <div class="account-main">
                             <strong>{{ item.paste.title or item.paste.slug }}</strong>
-                            <span>{{ item.paste.slug }}</span>
+                            {% if item.paste.title %}<span>{{ item.paste.slug }}</span>{% endif %}
                         </div>
                         <div class="account-meta">
                             <span>{{ item.display_syntax }}</span>
@@ -280,7 +280,7 @@
                         {% endif %}
                         <div class="account-people">
                             <span>{{ t("common.created_by", user=item.creator_label) }}</span>
-                            <span>{{ t("common.last_edited_by", user=item.last_editor_label) }}</span>
+                            {% if item.last_editor_label != item.creator_label %}<span>{{ t("common.last_edited_by", user=item.last_editor_label) }}</span>{% endif %}
                         </div>
                         <div class="account-actions">
                             <a class="button secondary" href="{{ item.edit_url }}">{{ t("common.edit") }}</a>

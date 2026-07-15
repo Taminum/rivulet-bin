@@ -1103,7 +1103,7 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 }
 
 .account-shell[data-account-view="cards"] .account-list {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     align-items: start;
 }
 
@@ -1111,16 +1111,25 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
     align-content: start;
 }
 
+.account-shell[data-account-view="cards"] .account-card:not(.account-card-link-compact) {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow-soft);
+}
+
 .account-shell[data-account-view="list"] .account-list {
     grid-template-columns: 1fr;
-    gap: 0.9rem;
+    gap: 0.5rem;
 }
 
 .account-shell[data-account-view="list"] .account-card {
     grid-template-columns: 1fr;
     align-items: stretch;
-    gap: 1rem;
-    padding: 0.95rem;
+    gap: 0.5rem;
+    padding: 0.6rem 0.8rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: color-mix(in srgb, var(--surface) 94%, transparent);
@@ -1137,21 +1146,16 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 
 .account-preview {
     display: grid;
-    gap: 0.7rem;
+    gap: 0.45rem;
     min-width: 0;
-    padding: 0.95rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 88%, transparent) 0%, color-mix(in srgb, var(--surface-strong) 84%, transparent) 100%);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(16px) saturate(160%);
-    -webkit-backdrop-filter: blur(16px) saturate(160%);
-    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+    padding: 0.65rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--editor-bg) 88%, var(--surface));
+    transition: background-color 160ms ease;
 }
 
 .account-preview:hover {
-    border-color: var(--border-strong);
+    background: color-mix(in srgb, var(--editor-bg) 70%, var(--surface-muted));
 }
 
 .account-preview-static {
@@ -1159,8 +1163,7 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 }
 
 .account-preview-static:hover {
-    transform: none;
-    border-color: var(--border);
+    background: color-mix(in srgb, var(--editor-bg) 88%, var(--surface));
 }
 
 .account-preview-topline {
@@ -1173,50 +1176,38 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 .account-preview-pill {
     display: inline-flex;
     align-items: center;
-    min-height: 28px;
-    padding: 0.25rem 0.65rem;
-    border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
-    border-radius: 999px;
-    color: var(--text-soft);
-    background: color-mix(in srgb, var(--primary-soft) 58%, var(--surface-strong));
-    font-size: 0.73rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
 .account-preview-state {
     display: inline-flex;
     align-items: center;
-    min-height: 28px;
-    padding: 0.25rem 0.65rem;
-    border-radius: 999px;
-    color: var(--text-soft);
-    background: var(--surface-strong);
-    border: 1px solid var(--border);
-    font-size: 0.73rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    color: var(--primary);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
 .account-preview-body {
-    min-height: 220px;
+    min-height: 110px;
+    max-height: 150px;
     display: flex;
     align-items: stretch;
     justify-content: stretch;
     overflow: hidden;
-    border-radius: var(--radius);
-    background: color-mix(in srgb, var(--editor-bg) 94%, var(--surface-strong));
-    border: 1px solid color-mix(in srgb, var(--editor-border) 88%, var(--border));
 }
 
 .account-preview-body-link {
-    min-height: 220px;
+    min-height: 110px;
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    padding: 1.2rem;
+    padding: 0.6rem;
     text-align: center;
 }
 
@@ -1224,10 +1215,10 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
     width: 100%;
     min-width: 0;
     margin: 0;
-    padding: 1rem 1.05rem;
+    padding: 0.2rem 0.1rem;
     color: var(--text-soft);
-    font-size: 0.87rem;
-    line-height: 1.55;
+    font-size: 0.78rem;
+    line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
     font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
@@ -1248,7 +1239,7 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 .account-note-rich {
     width: 100%;
     min-width: 0;
-    padding: 1rem 1.05rem;
+    padding: 0.2rem 0.1rem;
     color: var(--text);
     font-size: 0.95rem;
     line-height: 1.72;
@@ -1404,9 +1395,14 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
     padding: 0 0.1rem;
 }
 
+.account-shell[data-account-view="cards"] .account-card:not(.account-card-link-compact) .account-card-body {
+    padding: 0.7rem 0.8rem 0.8rem;
+    gap: 0.5rem;
+}
+
 .account-shell[data-account-view="list"] .account-card-body {
     align-content: start;
-    gap: 0.65rem;
+    gap: 0.4rem;
 }
 
 .account-main {
@@ -1617,10 +1613,31 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 }
 
 .account-actions:not(.account-actions-link-compact) .button {
-    min-height: 36px;
-    padding: 0.5rem 0.78rem;
-    border-radius: 8px;
-    font-size: 0.84rem;
+    min-height: 30px;
+    padding: 0.3rem 0.55rem;
+    border-radius: var(--radius-control);
+    font-size: 0.82rem;
+}
+
+.account-actions .button.secondary {
+    border-color: transparent;
+    background: transparent;
+    color: var(--text-soft);
+}
+
+.account-actions .button.secondary:hover {
+    border-color: transparent;
+    background: var(--surface-muted);
+    color: var(--text);
+}
+
+.account-actions .button.danger {
+    border-color: transparent;
+    background: transparent;
+}
+
+.account-actions .button.danger:hover {
+    background: var(--danger-soft);
 }
 
 .account-shell[data-account-view="cards"] .account-actions .button {
@@ -1629,18 +1646,7 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
 
 .account-shell[data-account-view="list"] .account-actions {
     align-items: flex-start;
-    gap: 0.55rem;
-    margin-top: 0.2rem;
-}
-
-.account-shell[data-account-view="list"] .account-actions > a,
-.account-shell[data-account-view="list"] .account-actions > button,
-.account-shell[data-account-view="list"] .account-actions > form {
-    flex: 0 0 96px;
-}
-
-.account-shell[data-account-view="list"] .account-actions .button {
-    width: 100%;
+    gap: 0.25rem;
 }
 
 .button {
@@ -2482,7 +2488,7 @@ body.note-preview-open {
 
     .account-preview-body,
     .account-preview-body-link {
-        min-height: 180px;
+        min-height: 110px;
     }
 
     .about-steps,
