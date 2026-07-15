@@ -1197,6 +1197,15 @@ for (const form of document.querySelectorAll("[data-markdown-form]")) {
   updatePreviewAvailability();
 }
 
+const pygmentsThemeSelect = document.querySelector("[data-pygments-theme-select]");
+if (pygmentsThemeSelect) {
+  pygmentsThemeSelect.addEventListener("change", () => {
+    for (const block of document.querySelectorAll("[data-pygments-preview]")) {
+      block.hidden = block.dataset.pygmentsPreview !== pygmentsThemeSelect.value;
+    }
+  });
+}
+
 // --- Zero-knowledge encrypted pastes ---------------------------------------
 // The AES-GCM key never leaves the browser: it travels only in the URL
 // fragment (#key=...), which is not sent to the server.

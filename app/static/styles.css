@@ -676,6 +676,28 @@ select:hover,
     margin-top: 0.05rem;
 }
 
+.pygments-preview-stack {
+    margin-top: 0.6rem;
+}
+
+.pygments-preview {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    background: var(--editor-bg);
+    font-size: 0.82rem;
+}
+
+.pygments-preview .line-code {
+    padding: 0.05rem 0;
+}
+
+.pygments-preview[hidden] {
+    display: none;
+}
+
 .editor-footnote {
     display: flex;
     align-items: center;

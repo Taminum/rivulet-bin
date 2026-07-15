@@ -71,6 +71,7 @@ from app.services import (
     _resolve_effective_syntax,
     _resolve_expiry,
     _resolve_language,
+    _resolve_pygments_theme,
     _resolve_short_link_title,
     _revision_compare_url,
     _revision_event_label,
@@ -81,6 +82,7 @@ from app.services import (
     _validate_editor_options,
     templates,
 )
+from app.rendering import pygments_theme_css
 
 
 router = APIRouter()
@@ -698,10 +700,12 @@ def view_paste(
                 changes_url=_changes_url(request, paste, current_user),
                 expiry_text=_expiry_status_text(paste, current_language),
                 backlinks=[],
+                pygments_css="",
             ),
         )
 
-    view_data = _build_content_view(paste.content, paste.syntax, paste.view_mode)
+    pygments_theme = _resolve_pygments_theme(current_user)
+    view_data = _build_content_view(paste.content, paste.syntax, paste.view_mode, pygments_theme)
     rendered_markdown = view_data["rendered_markdown"]
     if rendered_markdown:
         rendered_markdown = _apply_wiki_links(rendered_markdown, session)
@@ -725,5 +729,6 @@ def view_paste(
             changes_url=_changes_url(request, paste, current_user),
             expiry_text=_expiry_status_text(paste, current_language),
             backlinks=_paste_backlinks(session, paste),
+            pygments_css=pygments_theme_css(pygments_theme),
         ),
     )

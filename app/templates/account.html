@@ -69,6 +69,24 @@
                         {% endfor %}
                     </select>
                 </label>
+                <label class="auth-field">
+                    <span>{{ t("settings.code_theme") }}</span>
+                    <select name="pygments_theme" data-pygments-theme-select>
+                        {% for preview in pygments_theme_previews %}
+                        <option value="{{ preview.name }}" {% if settings_form_values.pygments_theme == preview.name %}selected{% endif %}>{{ preview.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="pygments-preview-stack">
+                {% for preview in pygments_theme_previews %}
+                {% if preview.css %}<style>{{ preview.css }}</style>{% endif %}
+                <div class="pygments-preview code-view" id="pyg-preview-{{ preview.name }}" data-pygments-preview="{{ preview.name }}" {% if settings_form_values.pygments_theme != preview.name %}hidden{% endif %}>
+                    {% for line in preview.lines %}
+                    <code class="line-code">{{ line.html }}</code>
+                    {% endfor %}
+                </div>
+                {% endfor %}
             </div>
             <div class="form-actions account-settings-submit">
                 <button type="submit" class="button primary">{{ t("settings.save_preferences") }}</button>

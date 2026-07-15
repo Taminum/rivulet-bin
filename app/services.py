@@ -42,11 +42,15 @@ from app.models import (
     User,
 )
 from app.rendering import (
+    DEFAULT_PYGMENTS_THEME,
+    PYGMENTS_THEMES,
     WIKI_LINK_RE,
     extract_wiki_links,
     generate_edit_key,
     generate_slug,
+    normalize_pygments_theme,
     normalize_slug,
+    pygments_theme_css,
     render_code_lines,
     render_markdown,
     render_preview_html,
@@ -310,7 +314,12 @@ def _viewer_syntax_label(syntax: str, resolved_view_syntax: str, view_mode: str)
     label = resolved_view_syntax if resolved_view_syntax in VALID_SYNTAX_VALUES else syntax
     return (label or "text").upper()
 
-def _build_content_view(content: str, syntax: str, view_mode: str) -> dict[str, object]:
+def _build_content_view(
+    content: str,
+    syntax: str,
+    view_mode: str,
+    pygments_theme: str = DEFAULT_PYGMENTS_THEME,
+) -> dict[str, object]:
     if view_mode == "markdown":
         rendered_markdown = render_markdown(content)
         resolved_view_syntax = "markdown"
@@ -318,7 +327,7 @@ def _build_content_view(content: str, syntax: str, view_mode: str) -> dict[str, 
     else:
         rendered_markdown = None
         resolved_view_syntax = "text" if view_mode == "link" else _resolve_view_syntax(content, syntax, view_mode)
-        lines = render_code_lines(content, resolved_view_syntax)
+        lines = render_code_lines(content, resolved_view_syntax, style=pygments_theme)
 
     return {
         "rendered_markdown": rendered_markdown,
@@ -329,6 +338,29 @@ def _build_content_view(content: str, syntax: str, view_mode: str) -> dict[str, 
         "view_mode_label": _viewer_mode_label(view_mode),
         "display_syntax": _viewer_syntax_label(syntax, resolved_view_syntax, view_mode),
     }
+
+_PYGMENTS_PREVIEW_SNIPPET = 'def hello():\n    # the answer\n    return "42"'
+_pygments_preview_cache: list[dict[str, object]] | None = None
+
+def _pygments_preview_blocks() -> list[dict[str, object]]:
+    global _pygments_preview_cache
+    if _pygments_preview_cache is None:
+        blocks: list[dict[str, object]] = []
+        for name in PYGMENTS_THEMES:
+            blocks.append(
+                {
+                    "name": name,
+                    "css": pygments_theme_css(name, scope=f"#pyg-preview-{name}"),
+                    "lines": render_code_lines(_PYGMENTS_PREVIEW_SNIPPET, "python", style=name),
+                }
+            )
+        _pygments_preview_cache = blocks
+    return _pygments_preview_cache
+
+def _resolve_pygments_theme(current_user: User | None) -> str:
+    if current_user is None:
+        return DEFAULT_PYGMENTS_THEME
+    return normalize_pygments_theme(getattr(current_user, "pygments_theme", None))
 
 def _sync_wiki_links(session: Session, paste: Paste, content: str) -> None:
     session.query(PasteLink).filter(PasteLink.source_paste_id == paste.id).delete()
@@ -708,6 +740,7 @@ def _render_account_page(
     settings_form_values = settings_form or {
         "preferred_language": normalize_language(current_user.preferred_language),
         "theme_preference": normalize_theme_preference(current_user.theme_preference),
+        "pygments_theme": _resolve_pygments_theme(current_user),
     }
     import_form_values = import_form or {"section": "all"}
 
@@ -827,6 +860,7 @@ def _render_account_page(
             note_error=note_error,
             settings_form_values=settings_form_values,
             settings_error=settings_error,
+            pygments_theme_previews=_pygments_preview_blocks(),
             import_form_values=import_form_values,
             import_error=import_error,
         ),

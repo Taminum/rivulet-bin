@@ -29,6 +29,7 @@ from app.models import (
     Bookmark,
     Note,
 )
+from app.rendering import normalize_pygments_theme
 from datetime import (
     datetime,
     timezone,
@@ -115,6 +116,7 @@ def update_account_preferences(
     request: Request,
     preferred_language: str = Form(default="en"),
     theme_preference: str = Form(default="dark"),
+    pygments_theme: str = Form(default=""),
     csrf_token: str = Form(default=""),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -144,12 +146,14 @@ def update_account_preferences(
             settings_form={
                 "preferred_language": normalize_language(raw_language),
                 "theme_preference": normalize_theme_preference(raw_theme),
+                "pygments_theme": normalize_pygments_theme(pygments_theme),
             },
             settings_error=error,
         )
 
     current_user.preferred_language = normalize_language(raw_language)
     current_user.theme_preference = normalize_theme_preference(raw_theme)
+    current_user.pygments_theme = normalize_pygments_theme(pygments_theme)
     session.add(current_user)
     session.commit()
 

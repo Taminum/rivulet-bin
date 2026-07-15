@@ -16,6 +16,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     preferred_language: Mapped[str] = mapped_column(String(5), default="en")
     theme_preference: Mapped[str] = mapped_column(String(16), default="dark")
+    pygments_theme: Mapped[str] = mapped_column(String(40), default="rivulet")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

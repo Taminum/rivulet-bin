@@ -40,6 +40,7 @@
     </div>
 </section>
 
+{% if pygments_css %}<style>{{ pygments_css }}</style>{% endif %}
 <section class="surface surface-viewer">
     {% if paste.is_encrypted %}
     <div class="encrypted-block" id="encrypted-content" data-encrypted-view

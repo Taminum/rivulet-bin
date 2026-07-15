@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import secrets
 from dataclasses import dataclass
+from functools import lru_cache
 from html import escape
 from urllib.parse import urlparse
 
@@ -12,12 +13,33 @@ from markupsafe import Markup
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
 from pygments.lexers import TextLexer, get_lexer_by_name, guess_lexer
+from pygments.styles import get_all_styles
 from pygments.util import ClassNotFound
 
 SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,64}$")
 SLUG_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 
 WIKI_LINK_RE = re.compile(r"\[\[([a-zA-Z0-9_-]{3,64})(?:\|([^\]\n]+))?\]\]")
+
+# "rivulet" is the hand-tuned palette shipped in styles.css; every other
+# entry must exist in the installed Pygments (filtered at import time).
+DEFAULT_PYGMENTS_THEME = "rivulet"
+_PYGMENTS_THEME_CANDIDATES = (
+    "monokai",
+    "dracula",
+    "nord",
+    "github-dark",
+    "one-dark",
+    "gruvbox-dark",
+    "solarized-dark",
+    "solarized-light",
+    "friendly",
+    "vs",
+)
+_AVAILABLE_STYLES = set(get_all_styles())
+PYGMENTS_THEMES = (DEFAULT_PYGMENTS_THEME,) + tuple(
+    name for name in _PYGMENTS_THEME_CANDIDATES if name in _AVAILABLE_STYLES
+)
 
 MARKDOWN_TAGS = bleach.sanitizer.ALLOWED_TAGS.union(
     {
@@ -114,9 +136,9 @@ def render_markdown(content: str) -> Markup:
     return Markup(cleaned)
 
 
-def render_code_lines(content: str, syntax: str) -> list[CodeLine]:
+def render_code_lines(content: str, syntax: str, style: str = DEFAULT_PYGMENTS_THEME) -> list[CodeLine]:
     lexer = _resolve_lexer(content, syntax)
-    formatter = HtmlFormatter(nowrap=True)
+    formatter = _build_formatter(style)
     highlighted = highlight(content or " ", lexer, formatter)
     source_lines = content.split("\n") or [content]
     highlighted_lines = highlighted.split("\n")
@@ -145,6 +167,35 @@ def render_preview_html(content: str, syntax: str) -> Markup:
     return Markup(
         bleach.clean(highlighted, tags={"span", "code"}, attributes={"span": ["class"]}, strip=True) or " "
     )
+
+
+def normalize_pygments_theme(value: str | None) -> str:
+    candidate = (value or "").strip().lower()
+    return candidate if candidate in PYGMENTS_THEMES else DEFAULT_PYGMENTS_THEME
+
+
+@lru_cache(maxsize=64)
+def pygments_theme_css(style: str, scope: str = ".code-view") -> str:
+    # The default theme's colors live in styles.css; nothing to inject.
+    if style not in PYGMENTS_THEMES or style == DEFAULT_PYGMENTS_THEME:
+        return ""
+    formatter = HtmlFormatter(style=style)
+    # get_style_defs also emits unscoped rules (pre, td.linenos, ...) that
+    # would leak outside the paste block - keep only the scoped ones.
+    scoped_lines = [
+        line for line in formatter.get_style_defs(scope).splitlines()
+        if line.startswith(f"{scope} ")
+    ]
+    background = formatter.style.background_color
+    if background:
+        scoped_lines.insert(0, f"{scope} {{ background: {background}; }}")
+    return "\n".join(scoped_lines)
+
+
+def _build_formatter(style: str) -> HtmlFormatter:
+    if style in _AVAILABLE_STYLES:
+        return HtmlFormatter(nowrap=True, style=style)
+    return HtmlFormatter(nowrap=True)
 
 
 def extract_wiki_links(content: str) -> list[str]:

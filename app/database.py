@@ -56,8 +56,11 @@ def _ensure_runtime_schema() -> None:
             connection.execute(text("ALTER TABLE users ADD COLUMN preferred_language TEXT DEFAULT 'en'"))
         if "theme_preference" not in user_columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN theme_preference TEXT DEFAULT 'dark'"))
+        if "pygments_theme" not in user_columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN pygments_theme TEXT DEFAULT 'rivulet'"))
         connection.execute(text("UPDATE users SET preferred_language = 'en' WHERE preferred_language IS NULL"))
         connection.execute(text("UPDATE users SET theme_preference = 'dark' WHERE theme_preference IS NULL"))
+        connection.execute(text("UPDATE users SET pygments_theme = 'rivulet' WHERE pygments_theme IS NULL"))
         if "tags_json" not in paste_columns:
             connection.execute(text("ALTER TABLE pastes ADD COLUMN tags_json TEXT DEFAULT '[]'"))
         if "owner_id" not in paste_columns:
