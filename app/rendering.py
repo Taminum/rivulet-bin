@@ -17,6 +17,8 @@ from pygments.util import ClassNotFound
 SLUG_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,64}$")
 SLUG_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 
+WIKI_LINK_RE = re.compile(r"\[\[([a-zA-Z0-9_-]{3,64})(?:\|([^\]\n]+))?\]\]")
+
 MARKDOWN_TAGS = bleach.sanitizer.ALLOWED_TAGS.union(
     {
         "p",
@@ -143,6 +145,15 @@ def render_preview_html(content: str, syntax: str) -> Markup:
     return Markup(
         bleach.clean(highlighted, tags={"span", "code"}, attributes={"span": ["class"]}, strip=True) or " "
     )
+
+
+def extract_wiki_links(content: str) -> list[str]:
+    seen: list[str] = []
+    for match in WIKI_LINK_RE.finditer(content or ""):
+        slug = match.group(1)
+        if slug not in seen:
+            seen.append(slug)
+    return seen
 
 
 def _resolve_lexer(content: str, syntax: str):

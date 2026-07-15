@@ -102,6 +102,27 @@ class Paste(Base):
         cascade="all, delete-orphan",
         order_by=lambda: PasteRevision.revision_number.desc(),
     )
+    outgoing_links: Mapped[list["PasteLink"]] = relationship(
+        back_populates="source_paste",
+        cascade="all, delete-orphan",
+    )
+
+
+class PasteLink(Base):
+    __tablename__ = "paste_links"
+    __table_args__ = (
+        UniqueConstraint("source_paste_id", "target_slug", name="uq_paste_links_source_target"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    source_paste_id: Mapped[int] = mapped_column(ForeignKey("pastes.id"), index=True)
+    target_slug: Mapped[str] = mapped_column(String(64), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    source_paste: Mapped[Paste] = relationship(back_populates="outgoing_links")
 
 
 class PasteCollaborator(Base):

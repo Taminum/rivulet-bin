@@ -62,4 +62,15 @@
     </div>
     {% endif %}
 </section>
+
+{% if backlinks %}
+<section class="surface backlinks-panel">
+    <p class="eyebrow">Referenced by</p>
+    <ul class="backlinks-list">
+        {% for source in backlinks %}
+        <li><a href="/{{ source.slug }}">{{ source.title or source.slug }}</a></li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
 {% endblock %}

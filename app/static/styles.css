@@ -700,6 +700,27 @@ select:hover,
     accent-color: var(--primary);
 }
 
+.editor-hint {
+    color: var(--text-faint);
+    font-size: 0.78rem;
+}
+
+.wiki-link {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.wiki-link:hover {
+    color: var(--primary-strong);
+}
+
+.wiki-link-broken {
+    color: var(--text-faint);
+    border-bottom: 1px dashed var(--text-faint);
+    cursor: help;
+}
+
 .encrypted-block {
     padding: 1.4rem;
 }
@@ -718,6 +739,27 @@ select:hover,
     white-space: pre-wrap;
     word-break: break-word;
     font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+}
+
+.backlinks-panel {
+    margin-top: 0.9rem;
+    padding: 0.9rem 1.1rem;
+}
+
+.backlinks-list {
+    margin: 0.4rem 0 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.25rem;
+}
+
+.backlinks-list a {
+    color: var(--primary);
+}
+
+.backlinks-list a:hover {
+    color: var(--primary-strong);
+    text-decoration: underline;
 }
 
 .account-settings-card .mini-note,

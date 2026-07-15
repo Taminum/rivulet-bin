@@ -42,6 +42,7 @@ from sqlalchemy.orm import (
 )
 
 from app.services import (
+    _apply_wiki_links,
     _assert_can_edit_paste,
     _assert_csrf,
     _base_context,
@@ -63,6 +64,7 @@ from app.services import (
     _maybe_attach_collaborator,
     _normalize_tags,
     _normalize_url_scheme,
+    _paste_backlinks,
     _paste_tags,
     _profile_user_label,
     _record_revision,
@@ -75,6 +77,7 @@ from app.services import (
     _revision_snapshot_url,
     _serialize_tags,
     _set_history_cookie,
+    _sync_wiki_links,
     _validate_editor_options,
     templates,
 )
@@ -227,6 +230,8 @@ def publish(
     )
     session.add(paste)
     session.flush()
+    if view_mode == "markdown" and not is_encrypted:
+        _sync_wiki_links(session, paste, content)
     _record_revision(session, paste, current_user, event="created")
     session.commit()
 
@@ -472,6 +477,7 @@ def edit_paste(
     paste.updated_at = datetime.now(timezone.utc)
     session.add(paste)
     session.flush()
+    _sync_wiki_links(session, paste, content if (view_mode == "markdown" and not is_encrypted) else "")
     _record_revision(session, paste, current_user, event="saved")
     session.commit()
 
@@ -691,10 +697,14 @@ def view_paste(
                 can_edit=_can_user_edit_paste(paste, current_user),
                 changes_url=_changes_url(request, paste, current_user),
                 expiry_text=_expiry_status_text(paste, current_language),
+                backlinks=[],
             ),
         )
 
     view_data = _build_content_view(paste.content, paste.syntax, paste.view_mode)
+    rendered_markdown = view_data["rendered_markdown"]
+    if rendered_markdown:
+        rendered_markdown = _apply_wiki_links(rendered_markdown, session)
 
     return templates.TemplateResponse(
         request=request,
@@ -706,7 +716,7 @@ def view_paste(
             current_user=current_user,
             paste=paste,
             tags=_paste_tags(paste),
-            rendered_markdown=view_data["rendered_markdown"],
+            rendered_markdown=rendered_markdown,
             lines=view_data["lines"],
             resolved_view_syntax=view_data["resolved_view_syntax"],
             line_count=view_data["line_count"],
@@ -714,5 +724,6 @@ def view_paste(
             can_edit=_can_user_edit_paste(paste, current_user),
             changes_url=_changes_url(request, paste, current_user),
             expiry_text=_expiry_status_text(paste, current_language),
+            backlinks=_paste_backlinks(session, paste),
         ),
     )

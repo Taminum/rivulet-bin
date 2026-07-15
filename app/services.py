@@ -37,10 +37,13 @@ from app.models import (
     Note,
     Paste,
     PasteCollaborator,
+    PasteLink,
     PasteRevision,
     User,
 )
 from app.rendering import (
+    WIKI_LINK_RE,
+    extract_wiki_links,
     generate_edit_key,
     generate_slug,
     normalize_slug,
@@ -326,6 +329,40 @@ def _build_content_view(content: str, syntax: str, view_mode: str) -> dict[str, 
         "view_mode_label": _viewer_mode_label(view_mode),
         "display_syntax": _viewer_syntax_label(syntax, resolved_view_syntax, view_mode),
     }
+
+def _sync_wiki_links(session: Session, paste: Paste, content: str) -> None:
+    session.query(PasteLink).filter(PasteLink.source_paste_id == paste.id).delete()
+    for slug in extract_wiki_links(content):
+        if slug != paste.slug:
+            session.add(PasteLink(source_paste_id=paste.id, target_slug=slug))
+
+def _apply_wiki_links(html: str, session: Session) -> Markup:
+    slugs = {match.group(1) for match in WIKI_LINK_RE.finditer(html)}
+    if not slugs:
+        return Markup(html)
+
+    existing = set(
+        session.scalars(select(Paste.slug).where(Paste.slug.in_(slugs))).all()
+    )
+
+    def _replace(match: re.Match) -> str:
+        slug = match.group(1)
+        label = match.group(2) or slug
+        if slug in existing:
+            return f'<a class="wiki-link" href="/{slug}">{label}</a>'
+        return f'<span class="wiki-link-broken" title="Paste not found">{label}</span>'
+
+    return Markup(WIKI_LINK_RE.sub(_replace, html))
+
+def _paste_backlinks(session: Session, paste: Paste) -> list[Paste]:
+    return list(
+        session.scalars(
+            select(Paste)
+            .join(PasteLink, PasteLink.source_paste_id == Paste.id)
+            .where(PasteLink.target_slug == paste.slug)
+            .order_by(Paste.updated_at.desc())
+        ).all()
+    )
 
 def _normalize_tag(value: str) -> str | None:
     cleaned = TAG_SANITIZE_RE.sub("", value.strip().lstrip("#")).strip("-_").lower()
