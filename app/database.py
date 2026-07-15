@@ -70,6 +70,9 @@ def _ensure_runtime_schema() -> None:
             connection.execute(text("ALTER TABLE pastes ADD COLUMN expire_at TIMESTAMP"))
         if "expire_after_views" not in paste_columns:
             connection.execute(text("ALTER TABLE pastes ADD COLUMN expire_after_views INTEGER"))
+        if "is_encrypted" not in paste_columns:
+            connection.execute(text("ALTER TABLE pastes ADD COLUMN is_encrypted BOOLEAN DEFAULT 0"))
+        connection.execute(text("UPDATE pastes SET is_encrypted = 0 WHERE is_encrypted IS NULL"))
         connection.execute(text("UPDATE pastes SET tags_json = '[]' WHERE tags_json IS NULL"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_pastes_owner_id ON pastes (owner_id)"))
         connection.execute(text("CREATE INDEX IF NOT EXISTS ix_pastes_creator_id ON pastes (creator_id)"))

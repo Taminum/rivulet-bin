@@ -53,9 +53,10 @@
     <div class="message error">{{ error }}</div>
     {% endif %}
 
-    <form id="edit-form" class="paste-form paste-form-fullscreen" action="/edit/{{ paste.slug }}" method="post" data-paste-form data-markdown-form>
+    <form id="edit-form" class="paste-form paste-form-fullscreen" action="/edit/{{ paste.slug }}" method="post" data-paste-form data-markdown-form{% if paste.is_encrypted %} data-encrypted="true"{% endif %}>
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="key" value="{{ key }}">
+        {% if paste.is_encrypted %}<input type="hidden" name="encrypted" value="true">{% endif %}
         <div class="editor-split">
         <label
             class="editor-field editor-field-fullscreen {% if validation_error %}has-validation-error{% endif %}"
@@ -70,6 +71,14 @@
         <div class="editor-preview" data-editor-preview hidden>
             <div class="prose markdown-body" data-preview-content></div>
         </div>
+        </div>
+        <div class="editor-footnote">
+            {% if paste.is_encrypted %}
+            <label class="encrypt-toggle">
+                <input type="checkbox" checked disabled>
+                <span>Encrypted (zero-knowledge) - saved with the key from your link</span>
+            </label>
+            {% endif %}
         </div>
     </form>
 </section>

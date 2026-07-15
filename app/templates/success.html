@@ -1,13 +1,19 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="surface surface-narrow">
+<section class="surface surface-narrow"{% if paste.is_encrypted %} data-success-encrypted{% endif %}>
     <h1>{{ paste.title or paste.slug }}</h1>
     <p class="mini-note">
         {% if paste.is_url %}{{ t("success.short_link_ready") }}{% else %}{{ t("success.paste_saved") }}{% endif %}
         {% if is_owned_by_current_user %} {{ t("success.attached_profile") }}{% endif %}
         {% if expiry_text %} {{ expiry_text }}{% endif %}
     </p>
+    {% if paste.is_encrypted %}
+    <p class="message error">
+        This paste is encrypted. The links below include the decryption key after <code>#key=</code> -
+        it is shown once and never stored on the server. Save the full link now: it cannot be recovered.
+    </p>
+    {% endif %}
     {% if tags %}
     <div class="tag-list">
         {% for tag in tags %}
@@ -47,9 +53,9 @@
     </div>
 
     <div class="form-actions">
-        <a class="button primary" href="/{{ paste.slug }}">{{ t("common.open") }}</a>
+        <a class="button primary" href="/{{ paste.slug }}" data-encrypted-link>{{ t("common.open") }}</a>
         {% if show_edit %}
-        <a class="button secondary" href="{{ edit_url }}">{{ t("common.edit") }}</a>
+        <a class="button secondary" href="{{ edit_url }}" data-encrypted-link>{{ t("common.edit") }}</a>
         <a class="button secondary" href="{{ changes_url }}">{{ t("common.changes") }}</a>
         {% endif %}
         {% if is_owned_by_current_user %}

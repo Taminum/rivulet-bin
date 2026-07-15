@@ -676,6 +676,50 @@ select:hover,
     margin-top: 0.05rem;
 }
 
+.editor-footnote {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.45rem 0.15rem 0;
+}
+
+.encrypt-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--text-soft);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.encrypt-toggle input {
+    width: auto;
+    margin: 0;
+    accent-color: var(--primary);
+}
+
+.encrypted-block {
+    padding: 1.4rem;
+}
+
+.encrypted-status {
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 0.92rem;
+}
+
+.encrypted-plain {
+    margin: 0;
+    color: var(--text);
+    font-size: 0.9rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+}
+
 .account-settings-card .mini-note,
 .account-settings-card .message {
     margin: 0;

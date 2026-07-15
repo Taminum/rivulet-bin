@@ -93,6 +93,7 @@ def publish(
     syntax: str = Form(default="auto"),
     mode: str = Form(default="auto"),
     expires: str = Form(default="never"),
+    encrypted: str = Form(default=""),
     csrf_token: str = Form(default=""),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -100,11 +101,17 @@ def publish(
     _assert_csrf(request, csrf_token)
     current_user = _current_user(request, session, settings)
     current_language = _resolve_language(request, current_user)
+    is_encrypted = encrypted.strip().lower() in {"true", "on", "1"}
     syntax = syntax.strip().lower()
     mode = mode.strip().lower()
+    if is_encrypted:
+        # Zero-knowledge payload: an opaque base64 blob the server must not
+        # parse, validate, or try to pretty-print.
+        syntax = "text"
+        mode = "code"
     title = title.strip()[:120] or None
     normalized_tags = _normalize_tags(tags)
-    effective_syntax = _resolve_effective_syntax(content, syntax, mode)
+    effective_syntax = "text" if is_encrypted else _resolve_effective_syntax(content, syntax, mode)
 
     option_error = _validate_editor_options(syntax, mode, current_language)
     if option_error:
@@ -156,13 +163,17 @@ def publish(
         )
 
     stripped_content = content.strip()
-    if mode == "link":
-        normalized_url = _normalize_url_scheme(stripped_content)
-        if normalized_url:
-            stripped_content = normalized_url
-    is_url, view_mode = decide_view_mode(stripped_content, mode, effective_syntax)
-    title = _resolve_short_link_title(title, stripped_content, is_url)
-    validation_issue = None if is_url else validate_content(content, effective_syntax)
+    if is_encrypted:
+        is_url, view_mode = False, "code"
+        validation_issue = None
+    else:
+        if mode == "link":
+            normalized_url = _normalize_url_scheme(stripped_content)
+            if normalized_url:
+                stripped_content = normalized_url
+        is_url, view_mode = decide_view_mode(stripped_content, mode, effective_syntax)
+        title = _resolve_short_link_title(title, stripped_content, is_url)
+        validation_issue = None if is_url else validate_content(content, effective_syntax)
     if validation_issue:
         return _home_with_error(
             request,
@@ -206,6 +217,7 @@ def publish(
         syntax=effective_syntax,
         view_mode=view_mode,
         is_url=is_url,
+        is_encrypted=is_encrypted,
         edit_key=generate_edit_key(),
         expire_at=expire_at,
         expire_after_views=expire_after_views,
@@ -332,12 +344,18 @@ def edit_paste(
     _assert_can_edit_paste(paste, key, current_user)
     _maybe_attach_collaborator(session, paste, current_user, key)
     previous_slug = paste.slug
+    # Encryption status is fixed at publish time; the edit form only carries
+    # a re-encrypted payload for pastes that were created encrypted.
+    is_encrypted = paste.is_encrypted
 
     syntax = syntax.strip().lower()
     mode = mode.strip().lower()
+    if is_encrypted:
+        syntax = "text"
+        mode = "code"
     title = title.strip()[:120] or None
     normalized_tags = _normalize_tags(tags)
-    effective_syntax = _resolve_effective_syntax(content, syntax, mode)
+    effective_syntax = "text" if is_encrypted else _resolve_effective_syntax(content, syntax, mode)
 
     option_error = _validate_editor_options(syntax, mode, current_language)
     if option_error:
@@ -392,13 +410,17 @@ def edit_paste(
         )
 
     stripped_content = content.strip()
-    if mode == "link":
-        normalized_url = _normalize_url_scheme(stripped_content)
-        if normalized_url:
-            stripped_content = normalized_url
-    is_url, view_mode = decide_view_mode(stripped_content, mode, effective_syntax)
-    title = _resolve_short_link_title(title, stripped_content, is_url)
-    validation_issue = None if is_url else validate_content(content, effective_syntax)
+    if is_encrypted:
+        is_url, view_mode = False, "code"
+        validation_issue = None
+    else:
+        if mode == "link":
+            normalized_url = _normalize_url_scheme(stripped_content)
+            if normalized_url:
+                stripped_content = normalized_url
+        is_url, view_mode = decide_view_mode(stripped_content, mode, effective_syntax)
+        title = _resolve_short_link_title(title, stripped_content, is_url)
+        validation_issue = None if is_url else validate_content(content, effective_syntax)
     if validation_issue:
         return _edit_with_error(
             request,
@@ -601,7 +623,8 @@ def export_pdf(slug: str, session: Session = Depends(get_session)):
     pdf.ln(5)
 
     pdf.set_font("Courier", size=10)
-    for line in paste.content.split("\n"):
+    pdf_lines = ["Encrypted content"] if paste.is_encrypted else paste.content.split("\n")
+    for line in pdf_lines:
         pdf.cell(text=line[:200], new_x="LMARGIN", new_y="NEXT")
 
     pdf_bytes = bytes(pdf.output())
@@ -648,6 +671,28 @@ def view_paste(
 
     if paste.is_url:
         return RedirectResponse(url=paste.content, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+    if paste.is_encrypted:
+        return templates.TemplateResponse(
+            request=request,
+            name="view.html",
+            context=_base_context(
+                request,
+                settings,
+                title=paste.title or paste.slug,
+                current_user=current_user,
+                paste=paste,
+                tags=_paste_tags(paste),
+                rendered_markdown=None,
+                lines=None,
+                resolved_view_syntax="text",
+                line_count=1,
+                content_length=len(paste.content),
+                can_edit=_can_user_edit_paste(paste, current_user),
+                changes_url=_changes_url(request, paste, current_user),
+                expiry_text=_expiry_status_text(paste, current_language),
+            ),
+        )
 
     view_data = _build_content_view(paste.content, paste.syntax, paste.view_mode)
 

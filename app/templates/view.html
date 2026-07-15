@@ -41,7 +41,15 @@
 </section>
 
 <section class="surface surface-viewer">
-    {% if rendered_markdown %}
+    {% if paste.is_encrypted %}
+    <div class="encrypted-block" id="encrypted-content" data-encrypted-view
+         data-missing-key-text="This paste is encrypted. Open it with the full link that includes the #key= fragment - without it the content cannot be decrypted."
+         data-bad-key-text="Decryption failed - the key in the link does not match this paste.">
+        <pre hidden data-encrypted-payload>{{ paste.content }}</pre>
+        <p class="encrypted-status" data-encrypted-status>Decrypting...</p>
+        <pre class="encrypted-plain" hidden data-encrypted-plain></pre>
+    </div>
+    {% elif rendered_markdown %}
     <article class="prose markdown-body">{{ rendered_markdown }}</article>
     {% else %}
     <div class="code-view" data-view-syntax="{{ resolved_view_syntax }}">

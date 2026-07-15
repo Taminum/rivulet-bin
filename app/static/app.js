@@ -1015,6 +1015,12 @@ for (const form of forms) {
     continue;
   }
 
+  if (form.dataset.encrypted === "true") {
+    // Encrypted pastes are decrypted client-side into the bare textarea;
+    // CodeMirror would initialize before decryption finishes.
+    continue;
+  }
+
   const syntaxField = getAssociatedField(form, "syntax");
   const modeField = getAssociatedField(form, "mode");
   const wrapper = textarea.closest(".editor-field");
@@ -1189,4 +1195,190 @@ for (const form of document.querySelectorAll("[data-markdown-form]")) {
   modeField?.addEventListener("change", updatePreviewAvailability);
   syntaxField?.addEventListener("change", updatePreviewAvailability);
   updatePreviewAvailability();
+}
+
+// --- Zero-knowledge encrypted pastes ---------------------------------------
+// The AES-GCM key never leaves the browser: it travels only in the URL
+// fragment (#key=...), which is not sent to the server.
+const ENC_KEY_STORAGE = "rivulet-enc-key";
+
+function bufToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function base64UrlEncode(buf) {
+  return bufToBase64(buf).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlToBytes(value) {
+  let b64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4) {
+    b64 += "=";
+  }
+  return base64ToBytes(b64);
+}
+
+function readEncryptionKeyFromHash() {
+  const match = window.location.hash.match(/key=([A-Za-z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+function importAesKey(rawBytes) {
+  return crypto.subtle.importKey("raw", rawBytes, "AES-GCM", true, ["encrypt", "decrypt"]);
+}
+
+async function encryptToPayload(plaintext, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plaintext));
+  const packed = new Uint8Array(iv.length + cipher.byteLength);
+  packed.set(iv, 0);
+  packed.set(new Uint8Array(cipher), iv.length);
+  return bufToBase64(packed.buffer);
+}
+
+async function decryptFromPayload(payloadB64, keyB64Url) {
+  const packed = base64ToBytes(payloadB64.trim());
+  const iv = packed.slice(0, 12);
+  const data = packed.slice(12);
+  const key = await importAesKey(base64UrlToBytes(keyB64Url));
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+  return new TextDecoder().decode(plain);
+}
+
+for (const form of forms) {
+  const encryptToggle = form.querySelector("[data-encrypt-toggle]");
+  const isEncryptedEdit = form.dataset.encrypted === "true";
+  if (!encryptToggle && !isEncryptedEdit) {
+    continue;
+  }
+
+  let encryptedReady = false;
+  form.addEventListener("submit", (event) => {
+    if (encryptedReady) {
+      return;
+    }
+    const wantEncrypt = isEncryptedEdit || (encryptToggle && encryptToggle.checked && !encryptToggle.disabled);
+    if (!wantEncrypt) {
+      return;
+    }
+    if (!window.crypto || !window.crypto.subtle) {
+      event.preventDefault();
+      window.alert("Encryption requires a secure context (HTTPS or localhost).");
+      return;
+    }
+
+    event.preventDefault();
+    (async () => {
+      const textarea = form.querySelector(".editor-source");
+      const plaintext = textarea.value;
+      let keyB64Url;
+      let key;
+      if (isEncryptedEdit) {
+        keyB64Url = readEncryptionKeyFromHash();
+        if (!keyB64Url) {
+          window.alert("Missing #key= fragment - open the edit link that contains the encryption key.");
+          return;
+        }
+        key = await importAesKey(base64UrlToBytes(keyB64Url));
+      } else {
+        key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+        keyB64Url = base64UrlEncode(await crypto.subtle.exportKey("raw", key));
+      }
+
+      textarea.value = await encryptToPayload(plaintext, key);
+      if (!form.querySelector('input[name="encrypted"]')) {
+        const hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "encrypted";
+        hidden.value = "true";
+        form.appendChild(hidden);
+      }
+      sessionStorage.setItem(ENC_KEY_STORAGE, keyB64Url);
+      encryptedReady = true;
+      // CodeMirror monkey-patches form.submit() to re-save the editor's
+      // plaintext into the textarea; call the native submit to keep the
+      // ciphertext we just wrote there.
+      HTMLFormElement.prototype.submit.call(form);
+    })().catch((error) => {
+      console.error("Encryption failed", error);
+      window.alert("Encryption failed - the paste was not sent.");
+    });
+  });
+}
+
+const encryptedView = document.querySelector("[data-encrypted-view]");
+if (encryptedView) {
+  const payloadNode = encryptedView.querySelector("[data-encrypted-payload]");
+  const statusNode = encryptedView.querySelector("[data-encrypted-status]");
+  const outputNode = encryptedView.querySelector("[data-encrypted-plain]");
+  const keyB64Url = readEncryptionKeyFromHash();
+  if (!keyB64Url) {
+    statusNode.textContent = encryptedView.dataset.missingKeyText || "This paste is encrypted. Open it with the full link that includes the #key= fragment - without it the content cannot be decrypted.";
+  } else {
+    decryptFromPayload(payloadNode.textContent, keyB64Url)
+      .then((plain) => {
+        outputNode.textContent = plain;
+        outputNode.hidden = false;
+        statusNode.hidden = true;
+      })
+      .catch(() => {
+        statusNode.textContent = encryptedView.dataset.badKeyText || "Decryption failed - the key in the link does not match this paste.";
+      });
+  }
+}
+
+const encryptedEditForm = document.querySelector('form[data-encrypted="true"]');
+if (encryptedEditForm) {
+  const textarea = encryptedEditForm.querySelector(".editor-source");
+  const keyB64Url = readEncryptionKeyFromHash();
+  if (!keyB64Url) {
+    window.alert("Missing #key= fragment - open the edit link that contains the encryption key to edit this paste.");
+  } else if (textarea) {
+    decryptFromPayload(textarea.value, keyB64Url)
+      .then((plain) => {
+        textarea.value = plain;
+      })
+      .catch(() => {
+        window.alert("Decryption failed - the key in the link does not match this paste.");
+      });
+  }
+}
+
+const successEncrypted = document.querySelector("[data-success-encrypted]");
+if (successEncrypted) {
+  const keyB64Url = sessionStorage.getItem(ENC_KEY_STORAGE) || readEncryptionKeyFromHash();
+  if (keyB64Url) {
+    const fragment = `#key=${keyB64Url}`;
+    history.replaceState(null, "", window.location.pathname + window.location.search + fragment);
+    for (const input of successEncrypted.querySelectorAll(".inline-copy input[readonly]")) {
+      if (!input.value.includes("#key=")) {
+        input.value += fragment;
+      }
+    }
+    for (const button of successEncrypted.querySelectorAll("[data-copy]")) {
+      const value = button.getAttribute("data-copy");
+      if (value && !value.includes("#key=")) {
+        button.setAttribute("data-copy", value + fragment);
+      }
+    }
+    for (const link of successEncrypted.querySelectorAll("a[data-encrypted-link]")) {
+      if (!link.href.includes("#key=")) {
+        link.href += fragment;
+      }
+    }
+  }
 }

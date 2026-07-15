@@ -62,6 +62,7 @@ class Paste(Base):
     syntax: Mapped[str] = mapped_column(String(40), default="auto")
     view_mode: Mapped[str] = mapped_column(String(20), default="code")
     is_url: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_encrypted: Mapped[bool] = mapped_column(Boolean, default=False)
     edit_key: Mapped[str] = mapped_column(String(64), index=True)
     view_count: Mapped[int] = mapped_column(Integer, default=0)
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
