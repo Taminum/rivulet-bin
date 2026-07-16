@@ -294,6 +294,13 @@ def success_page(
 @router.get("/raw/{slug}", response_class=PlainTextResponse, name="raw_paste")
 def raw_paste(slug: str, session: Session = Depends(get_session)) -> PlainTextResponse:
     paste = _get_paste_or_404(session, slug)
+    if _is_paste_expired(paste):
+        session.delete(paste)
+        session.commit()
+        return PlainTextResponse("Paste not found or expired", status_code=status.HTTP_404_NOT_FOUND)
+    # Raw access is intentionally not counted as a "view" for burn-after-read
+    # purposes - only view_paste() increments view_count, so fetching the raw
+    # text repeatedly doesn't burn through the view budget on its own.
     return PlainTextResponse(paste.content)
 
 @router.get("/edit/{slug}", response_class=HTMLResponse, name="edit_paste_form")
@@ -307,6 +314,13 @@ def edit_paste_form(
     paste = _get_paste_or_404(session, slug)
     current_user = _current_user(request, session, settings)
     _assert_can_edit_paste(paste, key, current_user)
+    # Intentionally not gated on _is_paste_expired(): the edit_key is already
+    # the access control here, expiry is only enforced against public view
+    # (view_paste, raw_paste, export_pdf) which is where deletion actually
+    # happens, and expiry is checked lazily - an expired-but-not-yet-viewed
+    # paste still exists in the DB. Letting the owner into the editor lets
+    # them copy their content out before it's gone for good instead of
+    # losing it the moment the clock (or view count) runs out.
     collaboration_joined = _maybe_attach_collaborator(session, paste, current_user, key)
     form_key = paste.edit_key if _is_owned_by_user(paste, current_user) else (key or paste.edit_key)
     return templates.TemplateResponse(
@@ -356,6 +370,7 @@ def edit_paste(
     current_user = _current_user(request, session, settings)
     current_language = _resolve_language(request, current_user)
     _assert_can_edit_paste(paste, key, current_user)
+    # Not gated on _is_paste_expired() - see edit_paste_form() for why.
     _maybe_attach_collaborator(session, paste, current_user, key)
     previous_slug = paste.slug
     # Encryption status is fixed at publish time; the edit form only carries
@@ -508,6 +523,7 @@ def revisions_page(
     paste = _get_paste_or_404(session, slug)
     current_user = _current_user(request, session, settings)
     _assert_can_edit_paste(paste, key, current_user)
+    # Not gated on _is_paste_expired() - see edit_paste_form() for why.
 
     revisions = session.scalars(
         select(PasteRevision)
@@ -553,6 +569,7 @@ def revision_compare(
     paste = _get_paste_or_404(session, slug)
     current_user = _current_user(request, session, settings)
     _assert_can_edit_paste(paste, key, current_user)
+    # Not gated on _is_paste_expired() - see edit_paste_form() for why.
 
     revision = _get_revision_or_404(session, paste.id, revision_number)
     current_panel = _build_content_view(paste.content, paste.syntax, paste.view_mode)
@@ -592,6 +609,7 @@ def revision_view(
     paste = _get_paste_or_404(session, slug)
     current_user = _current_user(request, session, settings)
     _assert_can_edit_paste(paste, key, current_user)
+    # Not gated on _is_paste_expired() - see edit_paste_form() for why.
 
     revision = _get_revision_or_404(session, paste.id, revision_number)
     revision_view_data = _build_content_view(revision.content, revision.syntax, revision.view_mode)
@@ -623,6 +641,8 @@ def revision_view(
 @router.get("/raw/{slug}/pdf")
 def export_pdf(slug: str, session: Session = Depends(get_session)):
     paste = _get_paste_or_404(session, slug)
+    if _is_paste_expired(paste):
+        raise HTTPException(status_code=404, detail="Paste not found or expired")
     try:
         from fpdf import FPDF
     except ImportError:

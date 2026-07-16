@@ -37,6 +37,19 @@ uvicorn app.main:app --reload --port 15212
 
 Then open [http://localhost:15212](http://localhost:15212).
 
+## Manual QA
+
+There's no automated test suite yet, so a few behaviors worth checking by
+hand after touching expiry logic:
+
+- **Burn-after-read / expiry bypass via raw and PDF export** - create a
+  paste with "Expires: after 1 view", open `/{slug}` once (this should
+  consume the view and delete the paste), then confirm:
+  - `/{slug}` again returns 410 Gone, not the content.
+  - `/raw/{slug}` returns 404 ("Paste not found or expired"), not the raw
+    text.
+  - `/raw/{slug}/pdf` returns 404, not a downloadable PDF.
+
 ## Docker Compose
 
 ```bash
