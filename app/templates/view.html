@@ -51,7 +51,7 @@
         <pre class="encrypted-plain" hidden data-encrypted-plain></pre>
     </div>
     {% elif rendered_markdown %}
-    <article class="prose markdown-body">{{ rendered_markdown }}</article>
+    <article class="prose markdown-body" data-paste-slug="{{ paste.slug }}" data-csrf-token="{{ csrf_token }}">{{ rendered_markdown }}</article>
     {% else %}
     <div class="code-view" data-view-syntax="{{ resolved_view_syntax }}">
         {% for line in lines %}

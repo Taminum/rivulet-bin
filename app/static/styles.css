@@ -2072,6 +2072,26 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
     margin-top: 0.45rem;
 }
 
+.task-list-item {
+    list-style: none;
+    margin-left: -1.2rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.task-checkbox {
+    width: auto;
+    margin: 0.2rem 0 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.task-checkbox:disabled {
+    cursor: default;
+    opacity: 0.7;
+}
+
 .about-shell {
     display: grid;
     gap: 1rem;

@@ -169,6 +169,40 @@ def render_preview_html(content: str, syntax: str) -> Markup:
     )
 
 
+TASK_ITEM_RE = re.compile(r"^( {0,3}[-*+] \[)([ xX])(\].*)$")
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def toggle_task_item(content: str, index: int) -> tuple[str, bool] | None:
+    lines = (content or "").split("\n")
+    in_fence = False
+    fence_char = ""
+    seen = 0
+    for i, line in enumerate(lines):
+        fence_match = _FENCE_RE.match(line)
+        if fence_match:
+            char = fence_match.group(1)[0]
+            if not in_fence:
+                in_fence, fence_char = True, char
+            elif char == fence_char:
+                in_fence = False
+            continue
+        if in_fence:
+            continue
+
+        match = TASK_ITEM_RE.match(line)
+        if not match:
+            continue
+        if seen == index:
+            was_checked = match.group(2).lower() == "x"
+            new_mark = " " if was_checked else "x"
+            lines[i] = match.group(1) + new_mark + match.group(3)
+            return "\n".join(lines), not was_checked
+        seen += 1
+
+    return None
+
+
 def normalize_pygments_theme(value: str | None) -> str:
     candidate = (value or "").strip().lower()
     return candidate if candidate in PYGMENTS_THEMES else DEFAULT_PYGMENTS_THEME

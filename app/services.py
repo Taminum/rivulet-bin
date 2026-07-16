@@ -386,6 +386,26 @@ def _apply_wiki_links(html: str, session: Session) -> Markup:
 
     return Markup(WIKI_LINK_RE.sub(_replace, html))
 
+TASK_LI_RE = re.compile(r"<li>(<p>)?\[([ xX])\](?:\s+|(?=<))")
+
+def _apply_task_lists(html: str, editable: bool) -> Markup:
+    counter = {"n": 0}
+
+    def _replace(match: re.Match) -> str:
+        p_open = match.group(1) or ""
+        checked = match.group(2).lower() == "x"
+        index = counter["n"]
+        counter["n"] += 1
+        attrs = " checked" if checked else ""
+        if not editable:
+            attrs += " disabled"
+        return (
+            f'<li class="task-list-item">{p_open}'
+            f'<input type="checkbox" class="task-checkbox" data-task-index="{index}"{attrs}> '
+        )
+
+    return Markup(TASK_LI_RE.sub(_replace, html))
+
 def _paste_backlinks(session: Session, paste: Paste) -> list[Paste]:
     return list(
         session.scalars(

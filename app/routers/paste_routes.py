@@ -23,6 +23,7 @@ from app.rendering import (
     decide_view_mode,
     generate_edit_key,
     normalize_slug,
+    toggle_task_item,
 )
 from app.validation import validate_content
 from datetime import (
@@ -42,6 +43,7 @@ from sqlalchemy.orm import (
 )
 
 from app.services import (
+    _apply_task_lists,
     _apply_wiki_links,
     _assert_can_edit_paste,
     _assert_csrf,
@@ -643,6 +645,39 @@ def export_pdf(slug: str, session: Session = Depends(get_session)):
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
+@router.post("/toggle/{slug}")
+def toggle_task(
+    slug: str,
+    request: Request,
+    task_index: int = Form(...),
+    csrf_token: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+):
+    _assert_csrf(request, csrf_token)
+    paste = _get_paste_or_404(session, slug)
+    current_user = _current_user(request, session, settings)
+
+    if _is_paste_expired(paste):
+        raise HTTPException(status_code=404, detail="Paste not found")
+    if paste.is_encrypted or paste.view_mode != "markdown":
+        raise HTTPException(status_code=400, detail="This paste has no task list")
+    if not _can_user_edit_paste(paste, current_user):
+        raise HTTPException(status_code=403, detail="Not allowed to edit this paste")
+
+    result = toggle_task_item(paste.content, task_index)
+    if result is None:
+        raise HTTPException(status_code=400, detail="Invalid task index")
+
+    updated_content, checked = result
+    paste.content = updated_content
+    paste.last_editor_id = current_user.id if current_user else None
+    paste.updated_at = datetime.now(timezone.utc)
+    session.add(paste)
+    session.commit()
+
+    return {"checked": checked}
+
 @router.get("/{slug}", response_class=HTMLResponse, name="view_paste")
 def view_paste(
     slug: str,
@@ -709,6 +744,7 @@ def view_paste(
     rendered_markdown = view_data["rendered_markdown"]
     if rendered_markdown:
         rendered_markdown = _apply_wiki_links(rendered_markdown, session)
+        rendered_markdown = _apply_task_lists(rendered_markdown, _can_user_edit_paste(paste, current_user))
 
     return templates.TemplateResponse(
         request=request,

@@ -1206,6 +1206,38 @@ if (pygmentsThemeSelect) {
   });
 }
 
+document.addEventListener("change", (event) => {
+  const checkbox = event.target;
+  if (!(checkbox instanceof HTMLInputElement) || !checkbox.matches(".task-checkbox") || checkbox.disabled) {
+    return;
+  }
+  const container = checkbox.closest("[data-paste-slug]");
+  if (!container) {
+    return;
+  }
+
+  const csrfToken = container.dataset.csrfToken || "";
+  const wasChecked = checkbox.checked;
+  checkbox.disabled = true;
+  const body = new FormData();
+  body.set("task_index", checkbox.dataset.taskIndex);
+  body.set("csrf_token", csrfToken);
+  fetch(`/toggle/${container.dataset.pasteSlug}`, { method: "POST", body })
+    .then((response) => {
+      if (!response.ok) throw new Error("toggle failed");
+      return response.json();
+    })
+    .then((data) => {
+      checkbox.checked = data.checked;
+      checkbox.disabled = false;
+    })
+    .catch(() => {
+      checkbox.checked = !wasChecked;
+      checkbox.disabled = false;
+      window.alert("Could not update the task. Try again.");
+    });
+});
+
 // --- Zero-knowledge encrypted pastes ---------------------------------------
 // The AES-GCM key never leaves the browser: it travels only in the URL
 // fragment (#key=...), which is not sent to the server.
