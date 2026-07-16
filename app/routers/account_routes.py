@@ -29,7 +29,10 @@ from app.models import (
     Bookmark,
     Note,
 )
-from app.rendering import normalize_pygments_theme
+from app.rendering import (
+    normalize_pygments_theme,
+    toggle_task_item,
+)
 from datetime import (
     datetime,
     timezone,
@@ -692,6 +695,33 @@ def update_account_note_tags(
         month=filter_month,
     )
     return RedirectResponse(url=redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+
+@router.post("/account/notes/{note_id}/toggle")
+def toggle_account_note_task(
+    note_id: int,
+    request: Request,
+    task_index: int = Form(...),
+    csrf_token: str = Form(default=""),
+    session: Session = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+):
+    _assert_csrf(request, csrf_token)
+    current_user = _current_user(request, session, settings)
+    if current_user is None:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    note = _get_note_or_404(session, note_id, current_user)
+    result = toggle_task_item(note.content, task_index)
+    if result is None:
+        raise HTTPException(status_code=400, detail="Invalid task index")
+
+    updated_content, checked = result
+    note.content = updated_content
+    note.updated_at = datetime.now(timezone.utc)
+    session.add(note)
+    session.commit()
+
+    return {"checked": checked}
 
 @router.post("/account/notes/{note_id}/delete")
 def delete_account_note(

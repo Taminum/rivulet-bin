@@ -375,6 +375,7 @@ function populateNotePreviewDialog(button) {
   }
   if (contentNode instanceof HTMLElement) {
     contentNode.innerHTML = payload instanceof HTMLElement ? payload.innerHTML : "<p>No content</p>";
+    contentNode.dataset.noteId = button.getAttribute("data-note-id") || "";
   }
 }
 
@@ -1206,33 +1207,63 @@ if (pygmentsThemeSelect) {
   });
 }
 
+function setTaskCheckboxState(el, checked) {
+  el.checked = checked;
+  // Keep the `checked` attribute (not just the live property) in sync too:
+  // the note preview modal is populated via payload.innerHTML, which
+  // serializes attributes, not the live IDL property.
+  if (checked) {
+    el.setAttribute("checked", "");
+  } else {
+    el.removeAttribute("checked");
+  }
+}
+
 document.addEventListener("change", (event) => {
   const checkbox = event.target;
   if (!(checkbox instanceof HTMLInputElement) || !checkbox.matches(".task-checkbox") || checkbox.disabled) {
     return;
   }
-  const container = checkbox.closest("[data-paste-slug]");
+  const container = checkbox.closest("[data-paste-slug], [data-note-id]");
   if (!container) {
     return;
   }
 
   const csrfToken = container.dataset.csrfToken || "";
+  const toggleUrl = "noteId" in container.dataset
+    ? `/account/notes/${container.dataset.noteId}/toggle`
+    : `/toggle/${container.dataset.pasteSlug}`;
+
   const wasChecked = checkbox.checked;
   checkbox.disabled = true;
   const body = new FormData();
   body.set("task_index", checkbox.dataset.taskIndex);
   body.set("csrf_token", csrfToken);
-  fetch(`/toggle/${container.dataset.pasteSlug}`, { method: "POST", body })
+  fetch(toggleUrl, { method: "POST", body })
     .then((response) => {
       if (!response.ok) throw new Error("toggle failed");
       return response.json();
     })
     .then((data) => {
-      checkbox.checked = data.checked;
+      setTaskCheckboxState(checkbox, data.checked);
       checkbox.disabled = false;
+      const noteId = container.dataset.noteId;
+      if (noteId) {
+        const taskIndex = checkbox.dataset.taskIndex;
+        const scopes = [
+          ...document.querySelectorAll(`[data-note-id="${noteId}"]`),
+          container.closest(".account-card")?.querySelector("[data-note-preview-payload]"),
+        ];
+        for (const scope of scopes) {
+          const mirror = scope?.querySelector(`.task-checkbox[data-task-index="${taskIndex}"]`);
+          if (mirror && mirror !== checkbox) {
+            setTaskCheckboxState(mirror, data.checked);
+          }
+        }
+      }
     })
     .catch(() => {
-      checkbox.checked = !wasChecked;
+      setTaskCheckboxState(checkbox, !wasChecked);
       checkbox.disabled = false;
       window.alert("Could not update the task. Try again.");
     });

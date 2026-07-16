@@ -2092,6 +2092,16 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
     opacity: 0.7;
 }
 
+.note-task-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.note-task-item .task-checkbox {
+    margin: 0;
+}
+
 .about-shell {
     display: grid;
     gap: 1rem;

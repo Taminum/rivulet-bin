@@ -1526,6 +1526,8 @@ def _note_content_html(content: str) -> Markup:
 def _note_preview_html(content: str) -> Markup:
     return _note_rich_html(content, max_lines=6, max_chars=320)
 
+NOTE_TASK_RE = re.compile(r"^ {0,3}[-*+] \[([ xX])\](?:\s+(.*))?$")
+
 def _note_rich_html(
     content: str,
     *,
@@ -1541,6 +1543,26 @@ def _note_rich_html(
     else:
         normalized = content.replace("\r\n", "\n").strip() or "No content"
 
+    rendered_lines: list[str] = []
+    task_index = 0
+    for line in normalized.split("\n"):
+        match = NOTE_TASK_RE.match(line)
+        if match:
+            checked = match.group(1).lower() == "x"
+            label = _note_inline_html(match.group(2) or "")
+            checked_attr = " checked" if checked else ""
+            rendered_lines.append(
+                f'<span class="note-task-item">'
+                f'<input type="checkbox" class="task-checkbox" data-task-index="{task_index}"{checked_attr}> '
+                f'{label}</span>'
+            )
+            task_index += 1
+        else:
+            rendered_lines.append(_note_inline_html(line))
+
+    return Markup("\n".join(rendered_lines))
+
+def _note_inline_html(normalized: str) -> str:
     parts: list[str] = []
     last_index = 0
 
@@ -1566,7 +1588,7 @@ def _note_rich_html(
     if last_index < len(normalized):
         parts.append(str(escape(normalized[last_index:])))
 
-    return Markup("".join(parts))
+    return "".join(parts)
 
 def _split_note_link_trailing_punctuation(value: str) -> tuple[str, str]:
     trimmed = value

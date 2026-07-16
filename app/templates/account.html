@@ -424,7 +424,7 @@
                             <span class="account-preview-pill">{{ t("account.note") }}</span>
                         </div>
                         <div class="account-preview-body account-preview-body-text">
-                            <div class="account-note-rich">{{ item.preview_html }}</div>
+                            <div class="account-note-rich" data-note-id="{{ item.note.id }}" data-csrf-token="{{ csrf_token }}">{{ item.preview_html }}</div>
                         </div>
                     </div>
                     <div class="account-card-body">
@@ -433,7 +433,7 @@
                                 <strong>{{ item.display_title }}</strong>
                                 <span>{{ item.line_count }} lines, {{ item.char_count }} chars</span>
                             </div>
-                            <button class="nav-button account-note-preview-trigger" type="button" data-note-preview-open data-note-preview-title="{{ item.display_title }}" data-note-preview-meta="{{ item.line_count }} lines, {{ item.char_count }} chars" data-note-preview-updated="{{ item.note.updated_at.strftime('%Y-%m-%d %H:%M') if item.note.updated_at else t('common.just_now') }}">{{ t("common.preview") }}</button>
+                            <button class="nav-button account-note-preview-trigger" type="button" data-note-preview-open data-note-id="{{ item.note.id }}" data-note-preview-title="{{ item.display_title }}" data-note-preview-meta="{{ item.line_count }} lines, {{ item.char_count }} chars" data-note-preview-updated="{{ item.note.updated_at.strftime('%Y-%m-%d %H:%M') if item.note.updated_at else t('common.just_now') }}">{{ t("common.preview") }}</button>
                         </div>
                         <div class="account-meta">
                             <span>{{ t("common.private") }}</span>
@@ -602,7 +602,7 @@
         </div>
 
         <div class="note-preview-panel-body">
-            <div class="account-note-rich account-note-rich-expanded" data-note-preview-content></div>
+            <div class="account-note-rich account-note-rich-expanded" data-note-preview-content data-csrf-token="{{ csrf_token }}"></div>
         </div>
     </section>
 </div>
