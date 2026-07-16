@@ -1026,45 +1026,11 @@ html[data-theme="dark"] .account-calendar-day.is-selected {
     gap: 0.8rem;
 }
 
-.account-note-compose-surface {
-    cursor: default;
-}
-
-.account-note-compose-surface:hover {
-    transform: none;
-    border-color: var(--border);
-}
-
-.account-preview-body-compose {
-    padding: 0;
-}
-
-.account-note-card-input {
-    width: 100%;
-    min-height: 220px;
-    padding: 1rem 1.05rem;
-    border: 0;
-    background: transparent;
-    color: var(--text);
-    font: inherit;
-    line-height: 1.7;
-    resize: none;
-}
-
-.account-note-card-input:focus {
-    box-shadow: none;
-}
-
-.account-note-card-actions {
+.note-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.65rem;
-    align-items: center;
-}
-
-.account-note-card-actions input {
-    flex: 1 1 180px;
-    min-width: 0;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
 }
 
 .account-note-input {
@@ -2407,6 +2373,10 @@ body.tags-open {
 }
 
 body.note-preview-open {
+    overflow: hidden;
+}
+
+body.note-open {
     overflow: hidden;
 }
 

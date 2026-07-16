@@ -877,6 +877,7 @@ def _render_account_page(
             ),
             note_form_mode="edit" if note_form_values["id"] else "create",
             note_cancel_url=_account_url(request, "notes", normalized_tag, search_query=normalized_search, created=normalized_created, month=normalized_month),
+            note_dialog_open=note_error is not None or bool(note_form_values["id"]),
             note_error=note_error,
             settings_form_values=settings_form_values,
             settings_error=settings_error,

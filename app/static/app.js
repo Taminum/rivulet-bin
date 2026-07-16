@@ -12,6 +12,7 @@ const bookmarkDialog = document.querySelector("[data-bookmark-dialog]");
 const tagsDialog = document.querySelector("[data-tags-dialog]");
 const shareDialog = document.querySelector("[data-share-dialog]");
 const notePreviewDialog = document.querySelector("[data-note-preview-dialog]");
+const noteDialog = document.querySelector("[data-note-dialog]");
 const preferencesForm = document.querySelector("[data-preferences-form]");
 const SQL_START_RE = /^\s*(select|with|insert|update|delete|create|alter|drop)\b/i;
 const HTML_START_RE = /^\s*<(?:!doctype|html|head|body|div|span|script|style|main|section|article|\w+-\w+)/i;
@@ -220,6 +221,25 @@ function setNotePreviewDialogOpen(isOpen) {
   }
 }
 
+function setNoteDialogOpen(isOpen) {
+  if (!noteDialog) {
+    return;
+  }
+
+  noteDialog.setAttribute("data-open", isOpen ? "true" : "false");
+  noteDialog.setAttribute("aria-hidden", isOpen ? "false" : "true");
+  document.body.classList.toggle("note-open", isOpen);
+
+  if (isOpen) {
+    const textarea = noteDialog.querySelector('[data-note-input="content"]');
+    if (textarea instanceof HTMLTextAreaElement) {
+      window.requestAnimationFrame(() => {
+        textarea.focus();
+      });
+    }
+  }
+}
+
 function populateBookmarkDialog(button = null) {
   if (!bookmarkDialog) {
     return;
@@ -261,6 +281,44 @@ function populateBookmarkDialog(button = null) {
   }
   for (const [field, value] of Object.entries(values)) {
     const input = bookmarkDialog.querySelector(`[data-bookmark-input="${field}"]`);
+    if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+      input.value = value;
+    }
+  }
+  if (errorNode instanceof HTMLElement) {
+    errorNode.hidden = true;
+  }
+}
+
+function populateNoteDialog(button = null) {
+  if (!noteDialog) {
+    return;
+  }
+
+  const action = button?.getAttribute("data-note-action") || "/account/notes";
+  const heading = button?.getAttribute("data-note-heading") || "New note";
+  const filterTag = button?.getAttribute("data-note-filter") || "";
+  const values = {
+    content: button?.getAttribute("data-note-value-content") || "",
+    tags: (button?.getAttribute("data-note-value-tags") || "").trim(),
+  };
+
+  const titleNode = noteDialog.querySelector("[data-note-dialog-title]");
+  const form = noteDialog.querySelector("[data-note-form]");
+  const filterInput = noteDialog.querySelector("[data-note-form-filter]");
+  const errorNode = noteDialog.querySelector(".message.error");
+
+  if (titleNode) {
+    titleNode.textContent = heading;
+  }
+  if (form instanceof HTMLFormElement) {
+    form.action = action;
+  }
+  if (filterInput instanceof HTMLInputElement) {
+    filterInput.value = filterTag;
+  }
+  for (const [field, value] of Object.entries(values)) {
+    const input = noteDialog.querySelector(`[data-note-input="${field}"]`);
     if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
       input.value = value;
     }
@@ -942,6 +1000,7 @@ function initializePlainTextarea(form, textarea, syntaxField, modeField, wrapper
 applyTheme(localStorage.getItem(THEME_KEY) || document.documentElement.dataset.themePreference || "dark");
 setHistoryOpen(false);
 setBookmarkDialogOpen(bookmarkDialog?.getAttribute("data-open") === "true");
+setNoteDialogOpen(noteDialog?.getAttribute("data-open") === "true");
 setNotePreviewDialogOpen(false);
 setAccountSidebarCollapsed(localStorage.getItem(ACCOUNT_SIDEBAR_KEY) === "true");
 setAccountView(localStorage.getItem(getAccountViewStorageKey()) || accountShell?.dataset.accountViewDefault || "cards");
@@ -1131,6 +1190,65 @@ for (const button of document.querySelectorAll("[data-note-preview-open]")) {
 for (const button of document.querySelectorAll("[data-note-preview-close]")) {
   button.addEventListener("click", () => {
     setNotePreviewDialogOpen(false);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-note-open]")) {
+  button.addEventListener("click", () => {
+    populateNoteDialog(button);
+    setNoteDialogOpen(true);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-note-open-new]")) {
+  button.addEventListener("click", () => {
+    populateNoteDialog(null);
+    setNoteDialogOpen(true);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-note-close]")) {
+  button.addEventListener("click", () => {
+    setNoteDialogOpen(false);
+  });
+}
+
+function toggleLinePrefix(textarea, prefix) {
+  const value = textarea.value;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+  const nextBreak = value.indexOf("\n", end);
+  const lineEnd = nextBreak === -1 ? value.length : nextBreak;
+
+  const lines = value.slice(lineStart, lineEnd).split("\n");
+  const nonEmpty = lines.filter((line) => line.trim().length > 0);
+  const shouldRemove = nonEmpty.length > 0 && nonEmpty.every((line) => line.startsWith(prefix));
+
+  const nextLines = lines.map((line) => {
+    if (line.trim().length === 0) {
+      return line;
+    }
+    return shouldRemove ? line.slice(prefix.length) : prefix + line;
+  });
+
+  const replacement = nextLines.join("\n");
+  textarea.setRangeText(replacement, lineStart, lineEnd, "end");
+  textarea.focus();
+}
+
+const NOTE_INSERT_PREFIXES = {
+  checklist: "- [ ] ",
+  list: "- ",
+};
+
+for (const button of document.querySelectorAll("[data-note-insert]")) {
+  button.addEventListener("click", () => {
+    const prefix = NOTE_INSERT_PREFIXES[button.getAttribute("data-note-insert")];
+    const textarea = button.closest("form")?.querySelector('[data-note-input="content"]');
+    if (prefix && textarea instanceof HTMLTextAreaElement) {
+      toggleLinePrefix(textarea, prefix);
+    }
   });
 }
 

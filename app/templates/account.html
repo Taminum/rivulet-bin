@@ -31,6 +31,8 @@
         {% if show_create_item_button %}
         {% if account_tab == 'bookmarks' %}
         <button class="button primary" type="button" data-bookmark-open-new data-bookmark-heading="{{ t('account.new_bookmark') }}">{{ t("account.new_bookmark") }}</button>
+        {% elif account_tab == 'notes' %}
+        <button class="button primary" type="button" data-note-open-new data-note-heading="{{ t('account.new_note') }}">{{ t("account.new_note") }}</button>
         {% else %}
         <a class="button primary" href="{{ create_item_url }}">{{ create_item_label }}</a>
         {% endif %}
@@ -386,37 +388,6 @@
         {% else %}
         <section class="account-shell" data-account-view="cards" data-account-view-default="cards" data-account-view-storage-key="accountView:notes">
             <div class="account-list">
-                <article class="account-card account-card-note-composer" data-preview-kind="text">
-                    <form method="post" action="{{ note_form_action }}" class="account-note-card-form">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                        <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}">
-                        <input type="hidden" name="filter_search" value="{{ active_search }}">
-                        <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
-                        <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
-                        <input type="hidden" name="title" value="{{ note_form_values.title }}">
-                        <div class="account-preview account-note-compose-surface">
-                            <div class="account-preview-topline">
-                                <span class="account-preview-pill">{% if note_form_mode == 'edit' %}{{ t("account.edit_note") }}{% else %}{{ t("account.new_note") }}{% endif %}</span>
-                                {% if note_form_mode == 'edit' %}<span class="account-preview-state">{{ t("account.editing") }}</span>{% endif %}
-                            </div>
-                            <div class="account-preview-body account-preview-body-text account-preview-body-compose">
-                                <textarea class="account-note-card-input" name="content" rows="10" placeholder="{{ t('account.note_placeholder') }}" required>{{ note_form_values.content }}</textarea>
-                            </div>
-                        </div>
-                        <div class="account-card-body">
-                            {% if note_error %}<p class="message error">{{ note_error }}</p>{% endif %}
-                            <div class="account-meta">
-                                <span>{{ t("common.private") }}</span>
-                                <span>{{ t("account.note_updating") if note_form_mode == 'edit' else t("account.note_saved_directly") }}</span>
-                            </div>
-                            <div class="account-note-card-actions">
-                                <input type="text" name="tags" maxlength="240" placeholder="#ideas #todo #draft" value="{{ note_form_values.tags }}">
-                                <button type="submit" class="button primary">{{ t("common.save") }}</button>
-                                {% if note_form_mode == 'edit' %}<a class="button secondary" href="{{ note_cancel_url }}">{{ t("common.cancel") }}</a>{% endif %}
-                            </div>
-                        </div>
-                    </form>
-                </article>
                 {% for item in note_items %}
                 <article class="account-card" data-preview-kind="text">
                     <div class="account-preview account-preview-static">
@@ -447,7 +418,7 @@
                         </div>
                         {% endif %}
                         <div class="account-actions">
-                            <a class="button secondary" href="{{ item.edit_url }}">{{ t("common.open") }}</a>
+                            <button class="button secondary" type="button" data-note-open data-note-action="/account/notes/{{ item.note.id }}" data-note-heading="{{ t('account.edit_note') }}" data-note-value-content="{{ item.note.content }}" data-note-value-tags="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}">{{ t("common.open") }}</button>
                             <button class="button secondary" type="button" data-tags-open data-tags-action="/account/notes/{{ item.note.id }}/tags" data-tags-slug="note-{{ item.note.id }}" data-tags-title="{{ item.display_title }}" data-tags-value="{% if item.tags %}{% for tag in item.tags %}#{{ tag }} {% endfor %}{% endif %}" data-tags-tab="notes" data-tags-filter="{{ active_tag or '' }}">{{ t("common.tags") }}</button>
                             <form method="post" action="/account/notes/{{ item.note.id }}/delete" data-delete-form data-delete-label="{{ item.display_title }}">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -513,6 +484,45 @@
             <div class="form-actions">
                 <button type="submit" class="button primary" data-bookmark-submit>{{ t("common.save") }}</button>
                 <button type="button" class="button secondary" data-bookmark-close>{{ t("common.cancel") }}</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<div class="share-dialog" data-note-dialog data-open="{{ 'true' if note_dialog_open else 'false' }}" aria-hidden="{{ 'false' if note_dialog_open else 'true' }}">
+    <button class="share-backdrop" type="button" data-note-close aria-label="Close note dialog"></button>
+    <section class="share-panel surface surface-narrow" role="dialog" aria-modal="true" aria-labelledby="note-dialog-title">
+        <div class="share-panel-header">
+            <div>
+                <p class="eyebrow">{{ t("account.section_notes") }}</p>
+                <h2 id="note-dialog-title" data-note-dialog-title>{{ t("account.edit_note") if note_form_mode == 'edit' else t("account.new_note") }}</h2>
+            </div>
+            <button class="history-close" type="button" data-note-close>{{ t("site.close") }}</button>
+        </div>
+
+        {% if note_error %}<p class="message error">{{ note_error }}</p>{% endif %}
+
+        <form method="post" action="{{ note_form_action }}" class="auth-form" data-note-form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="title" value="{{ note_form_values.title }}">
+            <input type="hidden" name="filter_tag" value="{{ active_tag or '' }}" data-note-form-filter>
+            <input type="hidden" name="filter_search" value="{{ active_search }}">
+            <input type="hidden" name="filter_created" value="{{ active_created or '' }}">
+            <input type="hidden" name="filter_month" value="{{ active_month or '' }}">
+            <div class="note-toolbar">
+                <button type="button" class="button secondary" data-note-insert="checklist">{{ t("account.note_toolbar_checklist") }}</button>
+                <button type="button" class="button secondary" data-note-insert="list">{{ t("account.note_toolbar_list") }}</button>
+            </div>
+            <label class="auth-field">
+                <textarea class="account-entry-textarea" name="content" rows="10" placeholder="{{ t('account.note_placeholder') }}" required data-note-input="content">{{ note_form_values.content }}</textarea>
+            </label>
+            <label class="auth-field">
+                <span>{{ t("common.tags") }}</span>
+                <input type="text" name="tags" maxlength="240" placeholder="#ideas #todo #draft" value="{{ note_form_values.tags }}" data-note-input="tags">
+            </label>
+            <div class="form-actions">
+                <button type="submit" class="button primary" data-note-submit>{{ t("common.save") }}</button>
+                <button type="button" class="button secondary" data-note-close>{{ t("common.cancel") }}</button>
             </div>
         </form>
     </section>
