@@ -64,6 +64,17 @@
     {% endif %}
 </section>
 
+{% if not paste.is_encrypted and paste.stickers %}
+<section class="surface stickers-panel">
+    <p class="eyebrow">{{ t("sticker.panel_title") }}</p>
+    <div class="stickers-grid">
+        {% for sticker in paste.stickers %}
+        <div class="sticker-card">{{ sticker.text }}</div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 {% if backlinks %}
 <section class="surface backlinks-panel">
     <p class="eyebrow">Referenced by</p>

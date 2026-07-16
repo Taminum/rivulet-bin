@@ -6,6 +6,7 @@ const ACCOUNT_VIEW_KEY = "accountView";
 const ACCOUNT_VIEW_VALUES = ["cards", "list"];
 const ACCOUNT_SIDEBAR_KEY = "accountSidebarCollapsed";
 const historyDrawer = document.querySelector("[data-history-drawer]");
+const stickerDrawer = document.querySelector("[data-sticker-drawer]");
 const accountLayout = document.querySelector("[data-account-layout]");
 const accountShell = document.querySelector("[data-account-view-default]");
 const bookmarkDialog = document.querySelector("[data-bookmark-dialog]");
@@ -147,6 +148,23 @@ function setHistoryOpen(isOpen) {
   historyDrawer.setAttribute("data-open", isOpen ? "true" : "false");
   historyDrawer.setAttribute("aria-hidden", isOpen ? "false" : "true");
   document.body.classList.toggle("history-open", isOpen);
+}
+
+function setStickerDrawerOpen(isOpen) {
+  if (!stickerDrawer) {
+    return;
+  }
+
+  stickerDrawer.setAttribute("data-open", isOpen ? "true" : "false");
+  stickerDrawer.setAttribute("aria-hidden", isOpen ? "false" : "true");
+  document.body.classList.toggle("sticker-open", isOpen);
+
+  if (isOpen) {
+    const input = stickerDrawer.querySelector("[data-sticker-input]");
+    if (input instanceof HTMLInputElement) {
+      window.requestAnimationFrame(() => input.focus());
+    }
+  }
 }
 
 function setShareDialogOpen(isOpen) {
@@ -1058,9 +1076,100 @@ for (const button of document.querySelectorAll("[data-history-close]")) {
   });
 }
 
+for (const button of document.querySelectorAll("[data-sticker-open]")) {
+  button.addEventListener("click", () => {
+    setStickerDrawerOpen(true);
+  });
+}
+
+for (const button of document.querySelectorAll("[data-sticker-close]")) {
+  button.addEventListener("click", () => {
+    setStickerDrawerOpen(false);
+  });
+}
+
+if (stickerDrawer) {
+  const field = stickerDrawer.querySelector("[data-sticker-field]");
+  const listEl = stickerDrawer.querySelector("[data-sticker-list]");
+  const input = stickerDrawer.querySelector("[data-sticker-input]");
+  const addButton = stickerDrawer.querySelector("[data-sticker-add]");
+
+  let stickers = [];
+  try {
+    const parsed = JSON.parse(field?.value || "[]");
+    stickers = Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    stickers = [];
+  }
+
+  const syncField = () => {
+    if (field instanceof HTMLInputElement) {
+      field.value = JSON.stringify(stickers);
+    }
+  };
+
+  const renderStickers = () => {
+    if (!listEl) {
+      return;
+    }
+    listEl.innerHTML = "";
+    if (stickers.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "history-empty";
+      empty.textContent = UI_MESSAGES.stickerEmpty || "No stickers yet.";
+      listEl.appendChild(empty);
+      return;
+    }
+    stickers.forEach((text, index) => {
+      const item = document.createElement("div");
+      item.className = "sticker-item";
+      const span = document.createElement("span");
+      span.textContent = text;
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "sticker-remove";
+      removeButton.textContent = "×";
+      removeButton.setAttribute("aria-label", "Remove sticker");
+      removeButton.addEventListener("click", () => {
+        stickers.splice(index, 1);
+        syncField();
+        renderStickers();
+      });
+      item.append(span, removeButton);
+      listEl.appendChild(item);
+    });
+  };
+
+  const addSticker = () => {
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+    const value = input.value.trim().slice(0, 280);
+    if (!value) {
+      return;
+    }
+    stickers.push(value);
+    input.value = "";
+    syncField();
+    renderStickers();
+    input.focus();
+  };
+
+  addButton?.addEventListener("click", addSticker);
+  input?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addSticker();
+    }
+  });
+
+  renderStickers();
+}
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     setHistoryOpen(false);
+    setStickerDrawerOpen(false);
     setBookmarkDialogOpen(false);
     setTagsDialogOpen(false);
     setShareDialogOpen(false);

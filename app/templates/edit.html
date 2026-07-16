@@ -38,6 +38,9 @@
 
 {% block topbar_actions %}
 <button type="button" class="nav-button" data-history-open title="{{ t('site.recent') }} (Ctrl+Shift+H)">{{ t("site.recent") }}</button>
+{% if not paste.is_encrypted %}
+<button type="button" class="nav-button" data-sticker-open title="{{ t('sticker.panel_title') }}">{{ t("sticker.panel_title") }}</button>
+{% endif %}
 <a href="{{ changes_url }}" class="nav-button" data-editor-link="changes" data-editor-form="edit-form" title="{{ t('common.changes') }} (Ctrl+Shift+L)">{{ t("common.changes") }}</a>
 <a href="/{{ paste.slug }}" class="nav-button" data-editor-link="open" data-editor-form="edit-form" title="{{ t('common.open') }} (Ctrl+Shift+O)">{{ t("common.open") }}</a>
 <button type="button" class="nav-button" data-preview-toggle title="Toggle markdown preview">Preview</button>
@@ -85,4 +88,9 @@
 </section>
 
 {% include "history_panel.html" %}
+{% if not paste.is_encrypted %}
+{% set sticker_form_id = "edit-form" %}
+{% set sticker_values = paste.stickers | map(attribute="text") | list %}
+{% include "sticker_drawer.html" %}
+{% endif %}
 {% endblock %}

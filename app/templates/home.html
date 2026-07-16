@@ -46,6 +46,7 @@
 
 {% block topbar_actions %}
 <button type="button" class="nav-button" data-history-open title="{{ t('site.history') }} (Ctrl+Shift+H)">{{ t("site.history") }}</button>
+<button type="button" class="nav-button" data-sticker-open title="{{ t('sticker.panel_title') }}">{{ t("sticker.panel_title") }}</button>
 <button type="button" class="nav-button" data-preview-toggle title="Toggle markdown preview">Preview</button>
 <button type="submit" form="paste-form" class="button primary nav-button" title="{{ t('common.save') }} (Ctrl+S)">{{ t("common.save") }}</button>
 {% endblock %}
@@ -84,4 +85,7 @@
 </section>
 
 {% include "history_panel.html" %}
+{% set sticker_form_id = "paste-form" %}
+{% set sticker_values = [] %}
+{% include "sticker_drawer.html" %}
 {% endblock %}

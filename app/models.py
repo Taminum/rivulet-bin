@@ -107,6 +107,11 @@ class Paste(Base):
         back_populates="source_paste",
         cascade="all, delete-orphan",
     )
+    stickers: Mapped[list["Sticker"]] = relationship(
+        back_populates="paste",
+        cascade="all, delete-orphan",
+        order_by=lambda: Sticker.id,
+    )
 
 
 class PasteLink(Base):
@@ -124,6 +129,20 @@ class PasteLink(Base):
     )
 
     source_paste: Mapped[Paste] = relationship(back_populates="outgoing_links")
+
+
+class Sticker(Base):
+    __tablename__ = "stickers"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    paste_id: Mapped[int] = mapped_column(ForeignKey("pastes.id"), index=True)
+    text: Mapped[str] = mapped_column(Text())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    paste: Mapped[Paste] = relationship(back_populates="stickers")
 
 
 class PasteCollaborator(Base):

@@ -80,6 +80,7 @@ from app.services import (
     _revision_snapshot_url,
     _serialize_tags,
     _set_history_cookie,
+    _sync_stickers,
     _sync_wiki_links,
     _validate_editor_options,
     templates,
@@ -101,6 +102,7 @@ def publish(
     mode: str = Form(default="auto"),
     expires: str = Form(default="never"),
     encrypted: str = Form(default=""),
+    stickers: str = Form(default=""),
     csrf_token: str = Form(default=""),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -236,6 +238,8 @@ def publish(
     session.flush()
     if view_mode == "markdown" and not is_encrypted:
         _sync_wiki_links(session, paste, content)
+    if not is_encrypted:
+        _sync_stickers(session, paste, stickers)
     _record_revision(session, paste, current_user, event="created")
     session.commit()
 
@@ -342,6 +346,7 @@ def edit_paste(
     custom_slug: str = Form(default=""),
     syntax: str = Form(default="auto"),
     mode: str = Form(default="auto"),
+    stickers: str = Form(default=""),
     csrf_token: str = Form(default=""),
     session: Session = Depends(get_session),
     settings: Settings = Depends(get_settings),
@@ -482,6 +487,8 @@ def edit_paste(
     session.add(paste)
     session.flush()
     _sync_wiki_links(session, paste, content if (view_mode == "markdown" and not is_encrypted) else "")
+    if not is_encrypted:
+        _sync_stickers(session, paste, stickers)
     _record_revision(session, paste, current_user, event="saved")
     session.commit()
 

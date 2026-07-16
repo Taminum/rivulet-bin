@@ -39,6 +39,7 @@ from app.models import (
     PasteCollaborator,
     PasteLink,
     PasteRevision,
+    Sticker,
     User,
 )
 from app.rendering import (
@@ -415,6 +416,33 @@ def _paste_backlinks(session: Session, paste: Paste) -> list[Paste]:
             .order_by(Paste.updated_at.desc())
         ).all()
     )
+
+MAX_STICKER_LENGTH = 280
+MAX_STICKERS_PER_PASTE = 20
+
+def _parse_sticker_texts(raw: str) -> list[str]:
+    try:
+        items = json.loads(raw) if raw else []
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(items, list):
+        return []
+
+    texts: list[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        cleaned = item.strip()[:MAX_STICKER_LENGTH]
+        if cleaned:
+            texts.append(cleaned)
+        if len(texts) >= MAX_STICKERS_PER_PASTE:
+            break
+    return texts
+
+def _sync_stickers(session: Session, paste: Paste, raw_stickers: str) -> None:
+    session.query(Sticker).filter(Sticker.paste_id == paste.id).delete()
+    for text in _parse_sticker_texts(raw_stickers):
+        session.add(Sticker(paste_id=paste.id, text=text))
 
 def _normalize_tag(value: str) -> str | None:
     cleaned = TAG_SANITIZE_RE.sub("", value.strip().lstrip("#")).strip("-_").lower()

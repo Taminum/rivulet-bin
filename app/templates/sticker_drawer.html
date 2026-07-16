@@ -1,0 +1,16 @@
+<div class="history-drawer" data-sticker-drawer aria-hidden="true">
+    <button type="button" class="history-backdrop" data-sticker-close aria-label="Close stickers"></button>
+    <aside class="history-panel">
+        <div class="history-panel-header">
+            <strong>{{ t("sticker.panel_title") }}</strong>
+            <button type="button" class="history-close" data-sticker-close aria-label="{{ t('site.close') }}">{{ t("site.close") }}</button>
+        </div>
+        <p class="mini-note">{{ t("sticker.panel_hint") }}</p>
+        <div class="sticker-compose">
+            <input type="text" maxlength="280" placeholder="{{ t('sticker.placeholder') }}" data-sticker-input>
+            <button type="button" class="button secondary" data-sticker-add>{{ t("common.add") }}</button>
+        </div>
+        <div class="history-list" data-sticker-list></div>
+        <input type="hidden" name="stickers" form="{{ sticker_form_id }}" data-sticker-field value="{{ sticker_values | tojson | forceescape }}">
+    </aside>
+</div>
